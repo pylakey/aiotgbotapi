@@ -1,0 +1,43 @@
+[tool.poetry]
+name = "aiotgbotapi"
+version = "0.1.0"
+description = "Asynchronous Telegram BOT API Client"
+authors = ["Pylakey <pylakey@protonmail.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/pylakey/aiotgbotapi"
+repository = "https://github.com/pylakey/aiotgbotapi"
+packages = [
+    { include = "aiotgbotapi" },
+]
+include = [
+    "README.md",
+]
+classifiers = [
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.70.0"
+httptools = "^0.3.0"
+httpx = {extras = ["http2"], version = "^0.20.0"}
+pydantic = "^1.8.2"
+ujson = "^4.2.0"
+uvicorn = "^0.15.0"
+uvloop = "^0.16.0"
+
+[tool.poetry.scripts]
+tgen = "generator.main:main"
+
+
+[tool.poetry.dev-dependencies]
+Jinja2 = "^3.0.2"
+pydash = "^5.1.0"
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
