@@ -93,9 +93,10 @@ class Bot(BotAPIClient):
         tasks = []
 
         for update_type in self.__updates_handlers.keys():
-            update_field = getattr(update, update_type, None)
+            update_field: SomeUpdate = getattr(update, update_type, None)
 
             if bool(update_field):
+                update_field.EXTRA["bot"] = self
                 tasks.extend(
                     self.__call_handler(h, update_field)
                     for h in self.__updates_handlers[update_type]

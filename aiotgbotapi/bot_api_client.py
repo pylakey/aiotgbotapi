@@ -45,7 +45,10 @@ class BotAPIClient:
                 for k, v in data.items()
                 if isinstance(v, InputFile)
             }
-            data = {k: v for k, v in data.items() if not isinstance(v, InputFile)}
+            data = {
+                k: v if not isinstance(v, InputFile) else f"attach://{k}"
+                for k, v in data.items()
+            }
 
         data = jsonable_encoder(
             data,
@@ -132,7 +135,7 @@ Please note that this parameter doesn't affect updates created before the call t
         """
         Use this method to specify a url and receive incoming updates via an outgoing webhook. Whenever there is an update for the bot, we will send an HTTPS POST request to the specified url, containing a JSON-serialized [Update](https://core.telegram.org/bots/api/#update). In case of an unsuccessful request, we will give up after a reasonable amount of attempts. Returns *True* on success.
 
-If you&#39;d like to make sure that the Webhook request comes from Telegram, we recommend using a secret path in the URL, e.g. `https://www.example.com/&lt;token&gt;`. Since nobody else knows your bot&#39;s token, you can be pretty sure it&#39;s us.
+If you'd like to make sure that the Webhook request comes from Telegram, we recommend using a secret path in the URL, e.g. `https://www.example.com/&lt;token&gt;`. Since nobody else knows your bot's token, you can be pretty sure it's us.
         https://core.telegram.org/bots/api/#setwebhook
 
         :param url: HTTPS url to send updates to. Use an empty string to remove webhook integration
@@ -201,7 +204,7 @@ Please note that this parameter doesn't affect updates created before the call t
 
     async def get_me(self) -> User:
         """
-        A simple method for testing your bot&#39;s authentication token. Requires no parameters. Returns basic information about the bot in form of a [User](https://core.telegram.org/bots/api/#user) object.
+        A simple method for testing your bot's authentication token. Requires no parameters. Returns basic information about the bot in form of a [User](https://core.telegram.org/bots/api/#user) object.
         https://core.telegram.org/bots/api/#getme
         """
         return await self.__make_request(
@@ -221,7 +224,7 @@ Please note that this parameter doesn't affect updates created before the call t
 
     async def close(self) -> bool:
         """
-        Use this method to close the bot instance before moving it from one local server to another. You need to delete the webhook before calling this method to ensure that the bot isn&#39;t launched again after server restart. The method will return error 429 in the first 10 minutes after the bot is launched. Returns *True* on success. Requires no parameters.
+        Use this method to close the bot instance before moving it from one local server to another. You need to delete the webhook before calling this method to ensure that the bot isn't launched again after server restart. The method will return error 429 in the first 10 minutes after the bot is launched. Returns *True* on success. Requires no parameters.
         https://core.telegram.org/bots/api/#close
         """
         return await self.__make_request(
@@ -302,7 +305,7 @@ Please note that this parameter doesn't affect updates created before the call t
             disable_notification: bool = None,
     ) -> Message:
         """
-        Use this method to forward messages of any kind. Service messages can&#39;t be forwarded. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
+        Use this method to forward messages of any kind. Service messages can't be forwarded. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
         https://core.telegram.org/bots/api/#forwardmessage
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -348,7 +351,7 @@ Please note that this parameter doesn't affect updates created before the call t
             ] = None,
     ) -> MessageId:
         """
-        Use this method to copy messages of any kind. Service messages and invoice messages can&#39;t be copied. The method is analogous to the method [forwardMessage](https://core.telegram.org/bots/api/#forwardmessage), but the copied message doesn&#39;t have a link to the original message. Returns the [MessageId](https://core.telegram.org/bots/api/#messageid) of the sent message on success.
+        Use this method to copy messages of any kind. Service messages and invoice messages can't be copied. The method is analogous to the method [forwardMessage](https://core.telegram.org/bots/api/#forwardmessage), but the copied message doesn't have a link to the original message. Returns the [MessageId](https://core.telegram.org/bots/api/#messageid) of the sent message on success.
         https://core.telegram.org/bots/api/#copymessage
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1465,7 +1468,7 @@ For sending voice messages, use the [sendVoice](https://core.telegram.org/bots/a
             action: str,
     ) -> bool:
         """
-        Use this method when you need to tell the user that something is happening on the bot&#39;s side. The status is set for 5 seconds or less (when a message arrives from your bot, Telegram clients clear its typing status). Returns *True* on success.
+        Use this method when you need to tell the user that something is happening on the bot's side. The status is set for 5 seconds or less (when a message arrives from your bot, Telegram clients clear its typing status). Returns *True* on success.
 
 Example: The [ImageBot](https://t.me/imagebot) needs some time to process a request and upload the image. Instead of sending a text message along the lines of “Retrieving image, please wait…”, the bot may use [sendChatAction](https://core.telegram.org/bots/api/#sendchataction) with *action* = *upload_photo*. The user will see a “sending photo” status for the bot.
 
@@ -1580,7 +1583,7 @@ We only recommend using this method when a response from the bot will take a **n
             only_if_banned: bool = None,
     ) -> bool:
         """
-        Use this method to unban a previously banned user in a supergroup or channel. The user will **not** return to the group or channel automatically, but will be able to join via link, etc. The bot must be an administrator for this to work. By default, this method guarantees that after the call the user is not a member of the chat, but will be able to join it. So if the user is a member of the chat they will also be **removed** from the chat. If you don&#39;t want this, use the parameter *only_if_banned*. Returns *True* on success.
+        Use this method to unban a previously banned user in a supergroup or channel. The user will **not** return to the group or channel automatically, but will be able to join via link, etc. The bot must be an administrator for this to work. By default, this method guarantees that after the call the user is not a member of the chat, but will be able to join it. So if the user is a member of the chat they will also be **removed** from the chat. If you don't want this, use the parameter *only_if_banned*. Returns *True* on success.
         https://core.telegram.org/bots/api/#unbanchatmember
 
         :param chat_id: Unique identifier for the target group or username of the target supergroup or channel (in the format `@username`)
@@ -1889,7 +1892,7 @@ We only recommend using this method when a response from the bot will take a **n
             photo: InputFile,
     ) -> bool:
         """
-        Use this method to set a new profile photo for the chat. Photos can&#39;t be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        Use this method to set a new profile photo for the chat. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
         https://core.telegram.org/bots/api/#setchatphoto
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1914,7 +1917,7 @@ We only recommend using this method when a response from the bot will take a **n
             chat_id: typing.Union[int, str],
     ) -> bool:
         """
-        Use this method to delete a chat photo. Photos can&#39;t be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        Use this method to delete a chat photo. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
         https://core.telegram.org/bots/api/#deletechatphoto
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1935,7 +1938,7 @@ We only recommend using this method when a response from the bot will take a **n
             title: str,
     ) -> bool:
         """
-        Use this method to change the title of a chat. Titles can&#39;t be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        Use this method to change the title of a chat. Titles can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
         https://core.telegram.org/bots/api/#setchattitle
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -1986,7 +1989,7 @@ We only recommend using this method when a response from the bot will take a **n
             disable_notification: bool = None,
     ) -> bool:
         """
-        Use this method to add a message to the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the &#39;can_pin_messages&#39; admin right in a supergroup or &#39;can_edit_messages&#39; admin right in a channel. Returns *True* on success.
+        Use this method to add a message to the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' admin right in a supergroup or 'can_edit_messages' admin right in a channel. Returns *True* on success.
         https://core.telegram.org/bots/api/#pinchatmessage
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -2015,7 +2018,7 @@ We only recommend using this method when a response from the bot will take a **n
             message_id: int = None,
     ) -> bool:
         """
-        Use this method to remove a message from the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the &#39;can_pin_messages&#39; admin right in a supergroup or &#39;can_edit_messages&#39; admin right in a channel. Returns *True* on success.
+        Use this method to remove a message from the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' admin right in a supergroup or 'can_edit_messages' admin right in a channel. Returns *True* on success.
         https://core.telegram.org/bots/api/#unpinchatmessage
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -2039,7 +2042,7 @@ We only recommend using this method when a response from the bot will take a **n
             chat_id: typing.Union[int, str],
     ) -> bool:
         """
-        Use this method to clear the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the &#39;can_pin_messages&#39; admin right in a supergroup or &#39;can_edit_messages&#39; admin right in a channel. Returns *True* on success.
+        Use this method to clear the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' admin right in a supergroup or 'can_edit_messages' admin right in a channel. Returns *True* on success.
         https://core.telegram.org/bots/api/#unpinallchatmessages
 
         :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
@@ -2255,7 +2258,7 @@ Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot 
             language_code: str = None,
     ) -> bool:
         """
-        Use this method to change the list of the bot&#39;s commands. See [https://core.telegram.org/bots#commands](https://core.telegram.org/bots#commands) for more details about bot commands. Returns *True* on success.
+        Use this method to change the list of the bot's commands. See [https://core.telegram.org/bots#commands](https://core.telegram.org/bots#commands) for more details about bot commands. Returns *True* on success.
         https://core.telegram.org/bots/api/#setmycommands
 
         :param commands: A JSON-serialized list of bot commands to be set as the list of the bot's commands. At most 100 commands can be specified.
@@ -2284,7 +2287,7 @@ Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot 
             language_code: str = None,
     ) -> bool:
         """
-        Use this method to delete the list of the bot&#39;s commands for the given scope and user language. After deletion, [higher level commands](https://core.telegram.org/bots/api/#determining-list-of-commands) will be shown to affected users. Returns *True* on success.
+        Use this method to delete the list of the bot's commands for the given scope and user language. After deletion, [higher level commands](https://core.telegram.org/bots/api/#determining-list-of-commands) will be shown to affected users. Returns *True* on success.
         https://core.telegram.org/bots/api/#deletemycommands
 
         :param scope: A JSON-serialized object, describing scope of users for which the commands are relevant. Defaults to [BotCommandScopeDefault](https://core.telegram.org/bots/api/#botcommandscopedefault)., defaults to None
@@ -2309,7 +2312,7 @@ Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot 
             language_code: str = None,
     ) -> list[BotCommand]:
         """
-        Use this method to get the current list of the bot&#39;s commands for the given scope and user language. Returns Array of [BotCommand](https://core.telegram.org/bots/api/#botcommand) on success. If commands aren&#39;t set, an empty list is returned.
+        Use this method to get the current list of the bot's commands for the given scope and user language. Returns Array of [BotCommand](https://core.telegram.org/bots/api/#botcommand) on success. If commands aren't set, an empty list is returned.
         https://core.telegram.org/bots/api/#getmycommands
 
         :param scope: A JSON-serialized object, describing scope of users. Defaults to [BotCommandScopeDefault](https://core.telegram.org/bots/api/#botcommandscopedefault)., defaults to None
@@ -2442,7 +2445,7 @@ Otherwise, you may use links like `t.me/your_bot?start=XXXX` that open your bot 
             reply_markup: InlineKeyboardMarkup = None,
     ) -> typing.Union[Message, bool]:
         """
-        Use this method to edit animation, audio, document, photo, or video messages. If a message is part of a message album, then it can be edited only to an audio for audio albums, only to a document for document albums and to a photo or a video otherwise. When an inline message is edited, a new file can&#39;t be uploaded; use a previously uploaded file via its file_id or specify a URL. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
+        Use this method to edit animation, audio, document, photo, or video messages. If a message is part of a message album, then it can be edited only to an audio for audio albums, only to a document for document albums and to a photo or a video otherwise. When an inline message is edited, a new file can't be uploaded; use a previously uploaded file via its file_id or specify a URL. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
         https://core.telegram.org/bots/api/#editmessagemedia
 
         :param media: A JSON-serialized object for a new media content of the message
@@ -3118,7 +3121,7 @@ No more than **50** results per query are allowed.
         """
         Informs a user that some of the Telegram Passport elements they provided contains errors. The user will not be able to re-submit their Passport to you until the errors are fixed (the contents of the field for which you returned the error must change). Returns *True* on success.
 
-Use this if the data submitted by the user doesn&#39;t satisfy the standards your service requires for any reason. For example, if a birthday date seems invalid, a submitted document is blurry, a scan shows evidence of tampering, etc. Supply some details in the error message to make sure the user knows how to correct the issues.
+Use this if the data submitted by the user doesn't satisfy the standards your service requires for any reason. For example, if a birthday date seems invalid, a submitted document is blurry, a scan shows evidence of tampering, etc. Supply some details in the error message to make sure the user knows how to correct the issues.
         https://core.telegram.org/bots/api/#setpassportdataerrors
 
         :param user_id: User identifier
@@ -3193,7 +3196,7 @@ Use this if the data submitted by the user doesn&#39;t satisfy the standards you
             inline_message_id: str = None,
     ) -> typing.Union[Message, bool]:
         """
-        Use this method to set the score of the specified user in a game message. On success, if the message is not an inline message, the [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned. Returns an error, if the new score is not greater than the user&#39;s current score in the chat and *force* is *False*.
+        Use this method to set the score of the specified user in a game message. On success, if the message is not an inline message, the [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned. Returns an error, if the new score is not greater than the user's current score in the chat and *force* is *False*.
         https://core.telegram.org/bots/api/#setgamescore
 
         :param user_id: User identifier

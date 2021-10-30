@@ -7,11 +7,18 @@ import pydantic
 import ujson
 from pydantic.generics import GenericModel
 
+if typing.TYPE_CHECKING:
+    from .bot import Bot
+
 from .errors import TelegramException
 
 
 class _BaseModel(pydantic.BaseModel):
     EXTRA: dict = {}
+
+    @property
+    def bot(self) -> Bot:
+        return self.EXTRA.get('bot')
 
     class Config:
         allow_population_by_field_name = True
@@ -72,7 +79,7 @@ At most **one** of the optional parameters can be present in any given update.
 
     update_id: int
     """
-    The update&#39;s unique identifier. Update identifiers start from a certain positive number and increase sequentially. This ID becomes especially handy if you&#39;re using [Webhooks](https://core.telegram.org/bots/api/#setwebhook), since it allows you to ignore repeated updates or to restore the correct update sequence, should they get out of order. If there are no new updates for at least a week, then identifier of the next update will be chosen randomly instead of sequentially.
+    The update's unique identifier. Update identifiers start from a certain positive number and increase sequentially. This ID becomes especially handy if you're using [Webhooks](https://core.telegram.org/bots/api/#setwebhook), since it allows you to ignore repeated updates or to restore the correct update sequence, should they get out of order. If there are no new updates for at least a week, then identifier of the next update will be chosen randomly instead of sequentially.
     """
     message: typing.Optional[Message]
     edited_message: typing.Optional[Message]
@@ -117,7 +124,7 @@ class Message(_BaseModel):
     """
     forward_sender_name: typing.Optional[str]
     """
-    *Optional*. Sender&#39;s name for messages forwarded from users who disallow adding a link to their account in forwarded messages
+    *Optional*. Sender's name for messages forwarded from users who disallow adding a link to their account in forwarded messages
     """
     forward_date: typing.Optional[int]
     """
@@ -201,11 +208,11 @@ class Message(_BaseModel):
     """
     supergroup_chat_created: typing.Optional[bool]
     """
-    *Optional*. Service message: the supergroup has been created. This field can&#39;t be received in a message coming through updates, because bot can&#39;t be a member of a supergroup when it is created. It can only be found in reply_to_message if someone replies to a very first message in a directly created supergroup.
+    *Optional*. Service message: the supergroup has been created. This field can't be received in a message coming through updates, because bot can't be a member of a supergroup when it is created. It can only be found in reply_to_message if someone replies to a very first message in a directly created supergroup.
     """
     channel_chat_created: typing.Optional[bool]
     """
-    *Optional*. Service message: the channel has been created. This field can&#39;t be received in a message coming through updates, because bot can&#39;t be a member of a channel when it is created. It can only be found in reply_to_message if someone replies to a very first message in a channel.
+    *Optional*. Service message: the channel has been created. This field can't be received in a message coming through updates, because bot can't be a member of a channel when it is created. It can only be found in reply_to_message if someone replies to a very first message in a channel.
     """
     message_auto_delete_timer_changed: typing.Optional[MessageAutoDeleteTimerChanged]
     migrate_to_chat_id: typing.Optional[int]
@@ -231,6 +238,282 @@ class Message(_BaseModel):
     voice_chat_participants_invited: typing.Optional[VoiceChatParticipantsInvited]
     reply_markup: typing.Optional[InlineKeyboardMarkup]
 
+    async def forward(
+            self,
+            chat_id: typing.Union[int, str],
+            disable_notification: bool = None,
+    ) -> Message:
+        """
+        Use this method to forward messages of any kind. Service messages can't be forwarded. On success, the sent [Message](https://core.telegram.org/bots/api/#message) is returned.
+        https://core.telegram.org/bots/api/#forwardmessage
+
+        :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
+        :type chat_id: typing.Union[int, str]
+
+        :param disable_notification: Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound., defaults to None
+        :type disable_notification: bool, optional
+
+        """
+        return await self.bot.forward_message(
+            chat_id=chat_id,
+            from_chat_id=self.chat.id,
+            message_id=self.message_id,
+            disable_notification=disable_notification
+        )
+
+    async def copy_message(
+            self,
+            chat_id: typing.Union[int, str],
+            caption: str = None,
+            parse_mode: str = 'HTML',
+            caption_entities: list[MessageEntity] = None,
+            disable_notification: bool = None,
+            reply_to_message_id: int = None,
+            allow_sending_without_reply: bool = None,
+            reply_markup: typing.Union[
+                InlineKeyboardMarkup,
+                ReplyKeyboardMarkup,
+                ReplyKeyboardRemove,
+                ForceReply
+            ] = None,
+    ) -> MessageId:
+        """
+        Use this method to copy messages of any kind. Service messages and invoice messages can't be copied. The method is analogous to the method [forwardMessage](https://core.telegram.org/bots/api/#forwardmessage), but the copied message doesn't have a link to the original message. Returns the [MessageId](https://core.telegram.org/bots/api/#messageid) of the sent message on success.
+        https://core.telegram.org/bots/api/#copymessage
+
+        :param chat_id: Unique identifier for the target chat or username of the target channel (in the format `@channelusername`)
+        :type chat_id: typing.Union[int, str]
+
+        :param caption: New caption for media, 0-1024 characters after entities parsing. If not specified, the original caption is kept, defaults to None
+        :type caption: str, optional
+
+        :param parse_mode: Mode for parsing entities in the new caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details., defaults to None
+        :type parse_mode: str, optional
+
+        :param caption_entities: A JSON-serialized list of special entities that appear in the new caption, which can be specified instead of *parse_mode*, defaults to None
+        :type caption_entities: list[MessageEntity], optional
+
+        :param disable_notification: Sends the message [silently](https://telegram.org/blog/channels-2-0#silent-messages). Users will receive a notification with no sound., defaults to None
+        :type disable_notification: bool, optional
+
+        :param reply_to_message_id: If the message is a reply, ID of the original message, defaults to None
+        :type reply_to_message_id: int, optional
+
+        :param allow_sending_without_reply: Pass *True*, if the message should be sent even if the specified replied-to message is not found, defaults to None
+        :type allow_sending_without_reply: bool, optional
+
+        :param reply_markup: Additional interface options. A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating), [custom reply keyboard](https://core.telegram.org/bots#keyboards), instructions to remove reply keyboard or to force a reply from the user., defaults to None
+        :type reply_markup: typing.Union[InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, ForceReply], optional
+
+        """
+        return await self.bot.copy_message(
+            chat_id=chat_id,
+            from_chat_id=self.chat.id,
+            message_id=self.message_id,
+            caption=caption,
+            parse_mode=parse_mode,
+            caption_entities=caption_entities,
+            disable_notification=disable_notification,
+            reply_to_message_id=reply_to_message_id,
+            allow_sending_without_reply=allow_sending_without_reply,
+            reply_markup=reply_markup,
+        )
+
+    async def reply(
+            self,
+            text: str,
+            parse_mode: str = 'HTML',
+            entities: list[MessageEntity] = None,
+            disable_web_page_preview: bool = None,
+            disable_notification: bool = None,
+            reply_markup: typing.Union[
+                InlineKeyboardMarkup,
+                ReplyKeyboardMarkup,
+                ReplyKeyboardRemove,
+                ForceReply
+            ] = None,
+    ) -> Message:
+        return await self.bot.send_message(
+            chat_id=self.chat.id,
+            text=text,
+            parse_mode=parse_mode,
+            entities=entities,
+            disable_web_page_preview=disable_web_page_preview,
+            disable_notification=disable_notification,
+            reply_to_message_id=self.message_id,
+            allow_sending_without_reply=True,
+            reply_markup=reply_markup,
+        )
+
+    async def edit_live_location(
+            self,
+            latitude: float,
+            longitude: float,
+            horizontal_accuracy: float = None,
+            heading: int = None,
+            proximity_alert_radius: int = None,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> typing.Union[Message, bool]:
+        """
+        Use this method to edit live location messages. A location can be edited until its *live_period* expires or editing is explicitly disabled by a call to [stopMessageLiveLocation](https://core.telegram.org/bots/api/#stopmessagelivelocation). On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
+        https://core.telegram.org/bots/api/#editmessagelivelocation
+
+        :param latitude: Latitude of new location
+        :type latitude: float
+
+        :param longitude: Longitude of new location
+        :type longitude: float
+
+        :param horizontal_accuracy: The radius of uncertainty for the location, measured in meters; 0-1500, defaults to None
+        :type horizontal_accuracy: float, optional
+
+        :param heading: Direction in which the user is moving, in degrees. Must be between 1 and 360 if specified., defaults to None
+        :type heading: int, optional
+
+        :param proximity_alert_radius: Maximum distance for proximity alerts about approaching another chat member, in meters. Must be between 1 and 100000 if specified., defaults to None
+        :type proximity_alert_radius: int, optional
+
+        :param reply_markup: A JSON-serialized object for a new [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating)., defaults to None
+        :type reply_markup: InlineKeyboardMarkup, optional
+
+        """
+        return await self.bot.edit_message_live_location(
+            latitude=latitude,
+            longitude=longitude,
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            horizontal_accuracy=horizontal_accuracy,
+            heading=heading,
+            proximity_alert_radius=proximity_alert_radius,
+            reply_markup=reply_markup,
+        )
+
+    async def stop_live_location(
+            self,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> typing.Union[Message, bool]:
+        """
+        Use this method to stop updating a live location message before *live_period* expires. On success, if the message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
+        https://core.telegram.org/bots/api/#stopmessagelivelocation
+
+        :param reply_markup: A JSON-serialized object for a new [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating)., defaults to None
+        :type reply_markup: InlineKeyboardMarkup, optional
+
+        """
+        return await self.bot.stop_message_live_location(
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            reply_markup=reply_markup
+        )
+
+    async def delete(self) -> bool:
+        return await self.bot.delete_message(
+            chat_id=self.chat.id,
+            message_id=self.message_id
+        )
+
+    async def edit_text(
+            self,
+            text: str,
+            parse_mode: str = 'HTML',
+            entities: list[MessageEntity] = None,
+            disable_web_page_preview: bool = None,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> Message:
+        return await self.bot.edit_message_text(
+            text=text,
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            parse_mode=parse_mode,
+            entities=entities,
+            disable_web_page_preview=disable_web_page_preview,
+            reply_markup=reply_markup
+        )
+
+    async def edit_media(
+            self,
+            media: InputMedia,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> typing.Union[Message, bool]:
+        """
+        Use this method to edit animation, audio, document, photo, or video messages. If a message is part of a message album, then it can be edited only to an audio for audio albums, only to a document for document albums and to a photo or a video otherwise. When an inline message is edited, a new file can't be uploaded; use a previously uploaded file via its file_id or specify a URL. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
+        https://core.telegram.org/bots/api/#editmessagemedia
+
+        :param media: A JSON-serialized object for a new media content of the message
+        :type media: InputMedia
+
+        :param reply_markup: A JSON-serialized object for a new [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating)., defaults to None
+        :type reply_markup: InlineKeyboardMarkup, optional
+
+        """
+        return await self.bot.edit_message_media(
+            media=media,
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            reply_markup=reply_markup
+        )
+
+    async def edit_caption(
+            self,
+            caption: str = None,
+            parse_mode: str = 'HTML',
+            caption_entities: list[MessageEntity] = None,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> typing.Union[Message, bool]:
+        """
+        Use this method to edit captions of messages. On success, if the edited message is not an inline message, the edited [Message](https://core.telegram.org/bots/api/#message) is returned, otherwise *True* is returned.
+        https://core.telegram.org/bots/api/#editmessagecaption
+
+        :param caption: New caption of the message, 0-1024 characters after entities parsing, defaults to None
+        :type caption: str, optional
+
+        :param parse_mode: Mode for parsing entities in the message caption. See [formatting options](https://core.telegram.org/bots/api/#formatting-options) for more details., defaults to None
+        :type parse_mode: str, optional
+
+        :param caption_entities: A JSON-serialized list of special entities that appear in the caption, which can be specified instead of *parse_mode*, defaults to None
+        :type caption_entities: list[MessageEntity], optional
+
+        :param reply_markup: A JSON-serialized object for an [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating)., defaults to None
+        :type reply_markup: InlineKeyboardMarkup, optional
+
+        """
+        return await self.bot.edit_message_caption(
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            caption=caption,
+            parse_mode=parse_mode,
+            caption_entities=caption_entities,
+            reply_markup=reply_markup,
+        )
+
+    async def edit_reply_markup(
+            self,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> typing.Union[Message, bool]:
+        return await self.bot.edit_message_reply_markup(
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            reply_markup=reply_markup
+        )
+
+    async def stop_poll(
+            self,
+            reply_markup: InlineKeyboardMarkup = None,
+    ) -> Poll:
+        """
+        Use this method to stop a poll which was sent by the bot. On success, the stopped [Poll](https://core.telegram.org/bots/api/#poll) is returned.
+        https://core.telegram.org/bots/api/#stoppoll
+
+        :param reply_markup: A JSON-serialized object for a new message [inline keyboard](https://core.telegram.org/bots#inline-keyboards-and-on-the-fly-updating)., defaults to None
+        :type reply_markup: InlineKeyboardMarkup, optional
+
+        """
+        return await self.bot.stop_poll(
+            chat_id=self.chat.id,
+            message_id=self.message_id,
+            reply_markup=reply_markup,
+        )
+
 
 class User(_BaseModel):
     """
@@ -247,19 +530,19 @@ class User(_BaseModel):
     """
     first_name: str
     """
-    User&#39;s or bot&#39;s first name
+    User's or bot's first name
     """
     last_name: typing.Optional[str]
     """
-    *Optional*. User&#39;s or bot&#39;s last name
+    *Optional*. User's or bot's last name
     """
     username: typing.Optional[str]
     """
-    *Optional*. User&#39;s or bot&#39;s username
+    *Optional*. User's or bot's username
     """
     language_code: typing.Optional[str]
     """
-    *Optional*. [IETF language tag](https://en.wikipedia.org/wiki/IETF_language_tag) of the user&#39;s language
+    *Optional*. [IETF language tag](https://en.wikipedia.org/wiki/IETF_language_tag) of the user's language
     """
     can_join_groups: typing.Optional[bool]
     """
@@ -284,6 +567,17 @@ class User(_BaseModel):
     @property
     def mention(self):
         return f"<a href='tg://user?id={self.id}'>{self.full_name}</a>"
+
+    async def get_profile_photos(
+            self,
+            offset: int = None,
+            limit: int = 100,
+    ) -> UserProfilePhotos:
+        return await self.bot.get_user_profile_photos(
+            user_id=self.id,
+            offset=offset,
+            limit=limit
+        )
 
 
 class Chat(_BaseModel):
@@ -352,6 +646,457 @@ class Chat(_BaseModel):
     """
     location: typing.Optional[ChatLocation]
 
+    async def ban_member(
+            self,
+            user_id: int,
+            until_date: int = None,
+            revoke_messages: bool = None,
+    ) -> bool:
+        """
+        Use this method to ban a user in a group, a supergroup or a channel. In the case of supergroups and channels, the user will not be able to return to the chat on their own using invite links, etc., unless [unbanned](https://core.telegram.org/bots/api/#unbanchatmember) first. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        https://core.telegram.org/bots/api/#banchatmember
+
+        :param user_id: Unique identifier of the target user
+        :type user_id: int
+
+        :param until_date: Date when the user will be unbanned, unix time. If user is banned for more than 366 days or less than 30 seconds from the current time they are considered to be banned forever. Applied for supergroups and channels only., defaults to None
+        :type until_date: int, optional
+
+        :param revoke_messages: Pass *True* to delete all messages from the chat for the user that is being removed. If *False*, the user will be able to see messages in the group that were sent before the user was removed. Always *True* for supergroups and channels., defaults to None
+        :type revoke_messages: bool, optional
+
+        """
+        return await self.bot.ban_chat_member(
+            chat_id=self.id,
+            user_id=user_id,
+            until_date=until_date,
+            revoke_messages=revoke_messages,
+        )
+
+    async def unban_member(
+            self,
+            user_id: int,
+            only_if_banned: bool = None,
+    ) -> bool:
+        """
+        Use this method to unban a previously banned user in a supergroup or channel. The user will **not** return to the group or channel automatically, but will be able to join via link, etc. The bot must be an administrator for this to work. By default, this method guarantees that after the call the user is not a member of the chat, but will be able to join it. So if the user is a member of the chat they will also be **removed** from the chat. If you don't want this, use the parameter *only_if_banned*. Returns *True* on success.
+        https://core.telegram.org/bots/api/#unbanchatmember
+
+        :param user_id: Unique identifier of the target user
+        :type user_id: int
+
+        :param only_if_banned: Do nothing if the user is not banned, defaults to None
+        :type only_if_banned: bool, optional
+
+        """
+        return await self.bot.unban_chat_member(
+            chat_id=self.id,
+            user_id=user_id,
+            only_if_banned=only_if_banned
+        )
+
+    async def restrict_member(
+            self,
+            user_id: int,
+            permissions: ChatPermissions,
+            until_date: int = None,
+    ) -> bool:
+        """
+        Use this method to restrict a user in a supergroup. The bot must be an administrator in the supergroup for this to work and must have the appropriate admin rights. Pass *True* for all permissions to lift restrictions from a user. Returns *True* on success.
+        https://core.telegram.org/bots/api/#restrictchatmember
+
+        :param user_id: Unique identifier of the target user
+        :type user_id: int
+
+        :param permissions: A JSON-serialized object for new user permissions
+        :type permissions: ChatPermissions
+
+        :param until_date: Date when restrictions will be lifted for the user, unix time. If user is restricted for more than 366 days or less than 30 seconds from the current time, they are considered to be restricted forever, defaults to None
+        :type until_date: int, optional
+
+        """
+        return await self.bot.restrict_chat_member(
+            chat_id=self.id,
+            user_id=user_id,
+            permissions=permissions,
+            until_date=until_date,
+        )
+
+    async def promote_member(
+            self,
+            user_id: int,
+            is_anonymous: bool = None,
+            can_manage_chat: bool = None,
+            can_post_messages: bool = None,
+            can_edit_messages: bool = None,
+            can_delete_messages: bool = None,
+            can_manage_voice_chats: bool = None,
+            can_restrict_members: bool = None,
+            can_promote_members: bool = None,
+            can_change_info: bool = None,
+            can_invite_users: bool = None,
+            can_pin_messages: bool = None,
+    ) -> bool:
+        """
+        Use this method to promote or demote a user in a supergroup or a channel. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Pass *False* for all boolean parameters to demote a user. Returns *True* on success.
+        https://core.telegram.org/bots/api/#promotechatmember
+
+        :param user_id: Unique identifier of the target user
+        :type user_id: int
+
+        :param is_anonymous: Pass *True*, if the administrator's presence in the chat is hidden, defaults to None
+        :type is_anonymous: bool, optional
+
+        :param can_manage_chat: Pass True, if the administrator can access the chat event log, chat statistics, message statistics in channels, see channel members, see anonymous administrators in supergroups and ignore slow mode. Implied by any other administrator privilege, defaults to None
+        :type can_manage_chat: bool, optional
+
+        :param can_post_messages: Pass True, if the administrator can create channel posts, channels only, defaults to None
+        :type can_post_messages: bool, optional
+
+        :param can_edit_messages: Pass True, if the administrator can edit messages of other users and can pin messages, channels only, defaults to None
+        :type can_edit_messages: bool, optional
+
+        :param can_delete_messages: Pass True, if the administrator can delete messages of other users, defaults to None
+        :type can_delete_messages: bool, optional
+
+        :param can_manage_voice_chats: Pass True, if the administrator can manage voice chats, defaults to None
+        :type can_manage_voice_chats: bool, optional
+
+        :param can_restrict_members: Pass True, if the administrator can restrict, ban or unban chat members, defaults to None
+        :type can_restrict_members: bool, optional
+
+        :param can_promote_members: Pass True, if the administrator can add new administrators with a subset of their own privileges or demote administrators that he has promoted, directly or indirectly (promoted by administrators that were appointed by him), defaults to None
+        :type can_promote_members: bool, optional
+
+        :param can_change_info: Pass True, if the administrator can change chat title, photo and other settings, defaults to None
+        :type can_change_info: bool, optional
+
+        :param can_invite_users: Pass True, if the administrator can invite new users to the chat, defaults to None
+        :type can_invite_users: bool, optional
+
+        :param can_pin_messages: Pass True, if the administrator can pin messages, supergroups only, defaults to None
+        :type can_pin_messages: bool, optional
+
+        """
+        return await self.bot.promote_chat_member(
+            chat_id=self.id,
+            user_id=user_id,
+            is_anonymous=is_anonymous,
+            can_manage_chat=can_manage_chat,
+            can_post_messages=can_post_messages,
+            can_edit_messages=can_edit_messages,
+            can_delete_messages=can_delete_messages,
+            can_manage_voice_chats=can_manage_voice_chats,
+            can_restrict_members=can_restrict_members,
+            can_promote_members=can_promote_members,
+            can_change_info=can_change_info,
+            can_invite_users=can_invite_users,
+            can_pin_messages=can_pin_messages,
+        )
+
+    async def set_administrator_custom_title(
+            self,
+            user_id: int,
+            custom_title: str,
+    ) -> bool:
+        """
+        Use this method to set a custom title for an administrator in a supergroup promoted by the bot. Returns *True* on success.
+        https://core.telegram.org/bots/api/#setchatadministratorcustomtitle
+
+        :param user_id: Unique identifier of the target user
+        :type user_id: int
+
+        :param custom_title: New custom title for the administrator; 0-16 characters, emoji are not allowed
+        :type custom_title: str
+
+        """
+        return await self.bot.set_chat_administrator_custom_title(
+            chat_id=self.id,
+            user_id=user_id,
+            custom_title=custom_title
+        )
+
+    async def set_permissions(
+            self,
+            permissions: ChatPermissions,
+    ) -> bool:
+        """
+        Use this method to set default chat permissions for all members. The bot must be an administrator in the group or a supergroup for this to work and must have the *can_restrict_members* admin rights. Returns *True* on success.
+        https://core.telegram.org/bots/api/#setchatpermissions
+
+        :param permissions: A JSON-serialized object for new default chat permissions
+        :type permissions: ChatPermissions
+
+        """
+        return await self.bot.set_chat_permissions(
+            chat_id=self.id,
+            permissions=permissions
+        )
+
+    async def export_invite_link(self) -> str:
+        """
+        Use this method to generate a new primary invite link for a chat; any previously generated primary link is revoked. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns the new invite link as *String* on success.
+        https://core.telegram.org/bots/api/#exportchatinvitelink
+
+        """
+        return await self.bot.export_chat_invite_link(chat_id=self.id)
+
+    async def create_invite_link(
+            self,
+            expire_date: int = None,
+            member_limit: int = None,
+    ) -> ChatInviteLink:
+        """
+        Use this method to create an additional invite link for a chat. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. The link can be revoked using the method [revokeChatInviteLink](https://core.telegram.org/bots/api/#revokechatinvitelink). Returns the new invite link as [ChatInviteLink](https://core.telegram.org/bots/api/#chatinvitelink) object.
+        https://core.telegram.org/bots/api/#createchatinvitelink
+
+        :param expire_date: Point in time (Unix timestamp) when the link will expire, defaults to None
+        :type expire_date: int, optional
+
+        :param member_limit: Maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999, defaults to None
+        :type member_limit: int, optional
+
+        """
+        return await self.bot.create_chat_invite_link(
+            chat_id=self.id,
+            expire_date=expire_date,
+            member_limit=member_limit,
+        )
+
+    async def edit_invite_link(
+            self,
+            invite_link: str,
+            expire_date: int = None,
+            member_limit: int = None,
+    ) -> ChatInviteLink:
+        """
+        Use this method to edit a non-primary invite link created by the bot. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns the edited invite link as a [ChatInviteLink](https://core.telegram.org/bots/api/#chatinvitelink) object.
+        https://core.telegram.org/bots/api/#editchatinvitelink
+
+        :param invite_link: The invite link to edit
+        :type invite_link: str
+
+        :param expire_date: Point in time (Unix timestamp) when the link will expire, defaults to None
+        :type expire_date: int, optional
+
+        :param member_limit: Maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999, defaults to None
+        :type member_limit: int, optional
+
+        """
+        return await self.bot.edit_chat_invite_link(
+            chat_id=self.id,
+            invite_link=invite_link,
+            expire_date=expire_date,
+            member_limit=member_limit,
+        )
+
+    async def revoke_invite_link(
+            self,
+            invite_link: str,
+    ) -> ChatInviteLink:
+        """
+        Use this method to revoke an invite link created by the bot. If the primary link is revoked, a new link is automatically generated. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns the revoked invite link as [ChatInviteLink](https://core.telegram.org/bots/api/#chatinvitelink) object.
+        https://core.telegram.org/bots/api/#revokechatinvitelink
+
+        :param invite_link: The invite link to revoke
+        :type invite_link: str
+
+        """
+        return await self.bot.revoke_chat_invite_link(
+            chat_id=self.id,
+            invite_link=invite_link
+        )
+
+    async def set_photo(
+            self,
+            photo: InputFile,
+    ) -> bool:
+        """
+        Use this method to set a new profile photo for the chat. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        https://core.telegram.org/bots/api/#setchatphoto
+
+        :param photo: New chat photo, uploaded using multipart/form-data
+        :type photo: InputFile
+
+        """
+        return await self.bot.set_chat_photo(
+            chat_id=self.id,
+            photo=photo
+        )
+
+    async def delete_photo(self) -> bool:
+        """
+        Use this method to delete a chat photo. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        https://core.telegram.org/bots/api/#deletechatphoto
+
+        """
+        return await self.bot.delete_chat_photo(chat_id=self.id)
+
+    async def set_title(
+            self,
+            title: str,
+    ) -> bool:
+        """
+        Use this method to change the title of a chat. Titles can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        https://core.telegram.org/bots/api/#setchattitle
+
+        :param title: New chat title, 1-255 characters
+        :type title: str
+
+        """
+        return await self.bot.set_chat_title(
+            chat_id=self.id,
+            title=title,
+        )
+
+    async def set_description(
+            self,
+            description: str = None,
+    ) -> bool:
+        """
+        Use this method to change the description of a group, a supergroup or a channel. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Returns *True* on success.
+        https://core.telegram.org/bots/api/#setchatdescription
+
+        :param description: New chat description, 0-255 characters, defaults to None
+        :type description: str, optional
+
+        """
+        return await self.bot.set_chat_description(
+            chat_id=self.id,
+            description=description,
+        )
+
+    async def pin_message(
+            self,
+            message_id: int,
+            disable_notification: bool = None,
+    ) -> bool:
+        """
+        Use this method to add a message to the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' admin right in a supergroup or 'can_edit_messages' admin right in a channel. Returns *True* on success.
+        https://core.telegram.org/bots/api/#pinchatmessage
+
+        :param message_id: Identifier of a message to pin
+        :type message_id: int
+
+        :param disable_notification: Pass *True*, if it is not necessary to send a notification to all chat members about the new pinned message. Notifications are always disabled in channels and private chats., defaults to None
+        :type disable_notification: bool, optional
+
+        """
+        return await self.bot.pin_chat_message(
+            chat_id=self.id,
+            message_id=message_id,
+            disable_notification=disable_notification
+        )
+
+    async def unpin_message(
+            self,
+            message_id: int = None,
+    ) -> bool:
+        """
+        Use this method to remove a message from the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' admin right in a supergroup or 'can_edit_messages' admin right in a channel. Returns *True* on success.
+        https://core.telegram.org/bots/api/#unpinchatmessage
+
+        :param message_id: Identifier of a message to unpin. If not specified, the most recent pinned message (by sending date) will be unpinned., defaults to None
+        :type message_id: int, optional
+
+        """
+        return await self.bot.unpin_chat_message(
+            chat_id=self.id,
+            message_id=message_id
+        )
+
+    async def unpin_all_messages(self) -> bool:
+        """
+        Use this method to clear the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' admin right in a supergroup or 'can_edit_messages' admin right in a channel. Returns *True* on success.
+        https://core.telegram.org/bots/api/#unpinallchatmessages
+
+        """
+        return await self.bot.unpin_all_chat_messages(chat_id=self.id)
+
+    async def leave(self) -> bool:
+        """
+        Use this method for your bot to leave a group, supergroup or channel. Returns *True* on success.
+        https://core.telegram.org/bots/api/#leavechat
+
+        """
+        return await self.bot.leave_chat(chat_id=self.id)
+
+    async def get_administrators(self) -> list[ChatMember]:
+        """
+        Use this method to get a list of administrators in a chat. On success, returns an Array of [ChatMember](https://core.telegram.org/bots/api/#chatmember) objects that contains information about all chat administrators except other bots. If the chat is a group or a supergroup and no administrators were appointed, only the creator will be returned.
+        https://core.telegram.org/bots/api/#getchatadministrators
+
+        """
+        return await self.bot.get_chat_administrators(chat_id=self.id)
+
+    async def get_member_count(self) -> int:
+        """
+        Use this method to get the number of members in a chat. Returns *Int* on success.
+        https://core.telegram.org/bots/api/#getchatmembercount
+
+        """
+        return await self.bot.get_chat_member_count(chat_id=self.id)
+
+    async def get_member(self, user_id: int) -> ChatMember:
+        """
+        Use this method to get information about a member of a chat. Returns a [ChatMember](https://core.telegram.org/bots/api/#chatmember) object on success.
+        https://core.telegram.org/bots/api/#getchatmember
+
+        :param user_id: Unique identifier of the target user
+        :type user_id: int
+
+        """
+        return await self.bot.get_chat_member(
+            chat_id=self.id,
+            user_id=user_id
+        )
+
+    async def set_sticker_set(
+            self,
+            sticker_set_name: str,
+    ) -> bool:
+        """
+        Use this method to set a new group sticker set for a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Use the field *can_set_sticker_set* optionally returned in [getChat](https://core.telegram.org/bots/api/#getchat) requests to check if the bot can use this method. Returns *True* on success.
+        https://core.telegram.org/bots/api/#setchatstickerset
+
+        :param sticker_set_name: Name of the sticker set to be set as the group sticker set
+        :type sticker_set_name: str
+
+        """
+        return await self.bot.set_chat_sticker_set(
+            chat_id=self.id,
+            sticker_set_name=sticker_set_name
+        )
+
+    async def delete_sticker_set(self) -> bool:
+        """
+        Use this method to delete a group sticker set from a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate admin rights. Use the field *can_set_sticker_set* optionally returned in [getChat](https://core.telegram.org/bots/api/#getchat) requests to check if the bot can use this method. Returns *True* on success.
+        https://core.telegram.org/bots/api/#deletechatstickerset
+
+        """
+        return await self.bot.delete_chat_sticker_set(chat_id=self.id)
+
+    async def send_action(
+            self,
+            action: str,
+    ) -> bool:
+        """
+        Use this method when you need to tell the user that something is happening on the bot's side. The status is set for 5 seconds or less (when a message arrives from your bot, Telegram clients clear its typing status). Returns *True* on success.
+
+Example: The [ImageBot](https://t.me/imagebot) needs some time to process a request and upload the image. Instead of sending a text message along the lines of “Retrieving image, please wait…”, the bot may use [sendChatAction](https://core.telegram.org/bots/api/#sendchataction) with *action* = *upload_photo*. The user will see a “sending photo” status for the bot.
+
+We only recommend using this method when a response from the bot will take a **noticeable** amount of time to arrive.
+        https://core.telegram.org/bots/api/#sendchataction
+
+        :param action: Type of action to broadcast. Choose one, depending on what the user is about to receive: *typing* for [text messages](https://core.telegram.org/bots/api/#sendmessage), *upload_photo* for [photos](https://core.telegram.org/bots/api/#sendphoto), *record_video* or *upload_video* for [videos](https://core.telegram.org/bots/api/#sendvideo), *record_voice* or *upload_voice* for [voice notes](https://core.telegram.org/bots/api/#sendvoice), *upload_document* for [general files](https://core.telegram.org/bots/api/#senddocument), *find_location* for [location data](https://core.telegram.org/bots/api/#sendlocation), *record_video_note* or *upload_video_note* for [video notes](https://core.telegram.org/bots/api/#sendvideonote).
+        :type action: str
+
+        """
+        return await self.bot.send_chat_action(
+            chat_id=self.id,
+            action=action
+        )
+
 
 class ChatPhoto(_BaseModel):
     """
@@ -364,7 +1109,7 @@ class ChatPhoto(_BaseModel):
     """
     small_file_unique_id: str
     """
-    Unique file identifier of small (160x160) chat photo, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique file identifier of small (160x160) chat photo, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     big_file_id: str
     """
@@ -372,7 +1117,7 @@ class ChatPhoto(_BaseModel):
     """
     big_file_unique_id: str
     """
-    Unique file identifier of big (640x640) chat photo, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique file identifier of big (640x640) chat photo, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
 
 
@@ -501,7 +1246,7 @@ class Animation(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     width: int
     """
@@ -541,7 +1286,7 @@ class PhotoSize(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     width: int
     """
@@ -568,7 +1313,7 @@ class Audio(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     duration: int
     """
@@ -608,7 +1353,7 @@ class Document(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     thumb: typing.Optional[PhotoSize]
     file_name: typing.Optional[str]
@@ -636,7 +1381,7 @@ class Sticker(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     width: int
     """
@@ -700,7 +1445,7 @@ class Video(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     width: int
     """
@@ -740,7 +1485,7 @@ class VideoNote(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     length: int
     """
@@ -768,7 +1513,7 @@ class Voice(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     duration: int
     """
@@ -791,19 +1536,19 @@ class Contact(_BaseModel):
 
     phone_number: str
     """
-    Contact&#39;s phone number
+    Contact's phone number
     """
     first_name: str
     """
-    Contact&#39;s first name
+    Contact's first name
     """
     last_name: typing.Optional[str]
     """
-    *Optional*. Contact&#39;s last name
+    *Optional*. Contact's last name
     """
     user_id: typing.Optional[int]
     """
-    *Optional*. Contact&#39;s user identifier in Telegram. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier.
+    *Optional*. Contact's user identifier in Telegram. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier.
     """
     vcard: typing.Optional[str]
     """
@@ -1057,7 +1802,7 @@ class OrderInfo(_BaseModel):
     """
     phone_number: typing.Optional[str]
     """
-    *Optional*. User&#39;s phone number
+    *Optional*. User's phone number
     """
     email: typing.Optional[str]
     """
@@ -1124,11 +1869,11 @@ class EncryptedPassportElement(_BaseModel):
     """
     phone_number: typing.Optional[str]
     """
-    *Optional*. User&#39;s verified phone number, available only for “phone_number” type
+    *Optional*. User's verified phone number, available only for “phone_number” type
     """
     email: typing.Optional[str]
     """
-    *Optional*. User&#39;s verified email address, available only for “email” type
+    *Optional*. User's verified email address, available only for “email” type
     """
     files: typing.Optional[list[PassportFile]]
     """
@@ -1149,7 +1894,7 @@ class EncryptedPassportElement(_BaseModel):
 
 class PassportFile(_BaseModel):
     """
-    This object represents a file uploaded to Telegram Passport. Currently all Telegram Passport files are in JPEG format when decrypted and don&#39;t exceed 10MB.
+    This object represents a file uploaded to Telegram Passport. Currently all Telegram Passport files are in JPEG format when decrypted and don't exceed 10MB.
     """
 
     file_id: str
@@ -1158,7 +1903,7 @@ class PassportFile(_BaseModel):
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     file_size: int
     """
@@ -1177,7 +1922,7 @@ class EncryptedCredentials(_BaseModel):
 
     data: str
     """
-    Base64-encoded encrypted JSON-serialized data with unique user&#39;s payload, data hashes and secrets required for [EncryptedPassportElement](https://core.telegram.org/bots/api/#encryptedpassportelement) decryption and authentication
+    Base64-encoded encrypted JSON-serialized data with unique user's payload, data hashes and secrets required for [EncryptedPassportElement](https://core.telegram.org/bots/api/#encryptedpassportelement) decryption and authentication
     """
     hash: str
     """
@@ -1185,7 +1930,7 @@ class EncryptedCredentials(_BaseModel):
     """
     secret: str
     """
-    Base64-encoded secret, encrypted with the bot&#39;s public RSA key, required for data decryption
+    Base64-encoded secret, encrypted with the bot's public RSA key, required for data decryption
     """
 
 
@@ -1274,13 +2019,13 @@ class InlineKeyboardButton(_BaseModel):
     """
     switch_inline_query: typing.Optional[str]
     """
-    *Optional*. If set, pressing the button will prompt the user to select one of their chats, open that chat and insert the bot&#39;s username and the specified inline query in the input field. Can be empty, in which case just the bot&#39;s username will be inserted.  
+    *Optional*. If set, pressing the button will prompt the user to select one of their chats, open that chat and insert the bot's username and the specified inline query in the input field. Can be empty, in which case just the bot's username will be inserted.  
 
 **Note:** This offers an easy way for users to start using your bot in [inline mode](/bots/inline) when they are currently in a private chat with it. Especially useful when combined with [*switch_pm…*](https://core.telegram.org/bots/api/#answerinlinequery) actions – in this case the user will be automatically returned to the chat they switched from, skipping the chat selection screen.
     """
     switch_inline_query_current_chat: typing.Optional[str]
     """
-    *Optional*. If set, pressing the button will insert the bot&#39;s username and the specified inline query in the current chat&#39;s input field. Can be empty, in which case only the bot&#39;s username will be inserted.  
+    *Optional*. If set, pressing the button will insert the bot's username and the specified inline query in the current chat's input field. Can be empty, in which case only the bot's username will be inserted.  
 
 This offers a quick way for the user to open your bot in inline mode in the same chat – good for selecting something from multiple options.
     """
@@ -1314,7 +2059,7 @@ Sample bot: [@discussbot](https://t.me/discussbot)
     """
     bot_username: typing.Optional[str]
     """
-    *Optional*. Username of a bot, which will be used for user authorization. See [Setting up a bot](https://core.telegram.org/widgets/login#setting-up-a-bot) for more details. If not specified, the current bot&#39;s username will be assumed. The *url*&#39;s domain must be the same as the domain linked with the bot. See [Linking your domain to the bot](https://core.telegram.org/widgets/login#linking-your-domain-to-the-bot) for more details.
+    *Optional*. Username of a bot, which will be used for user authorization. See [Setting up a bot](https://core.telegram.org/widgets/login#setting-up-a-bot) for more details. If not specified, the current bot's username will be assumed. The *url*'s domain must be the same as the domain linked with the bot. See [Linking your domain to the bot](https://core.telegram.org/widgets/login#linking-your-domain-to-the-bot) for more details.
     """
     request_write_access: typing.Optional[bool]
     """
@@ -1353,6 +2098,51 @@ class InlineQuery(_BaseModel):
     *Optional*. Type of the chat, from which the inline query was sent. Can be either “sender” for a private chat with the inline query sender, “private”, “group”, “supergroup”, or “channel”. The chat type should be always known for requests sent from official clients and most third-party clients, unless the request was sent from a secret chat
     """
     location: typing.Optional[Location]
+
+    async def answer(
+            self,
+            results: list[InlineQueryResult],
+            cache_time: int = 300,
+            is_personal: bool = None,
+            next_offset: str = None,
+            switch_pm_text: str = None,
+            switch_pm_parameter: str = None,
+    ) -> bool:
+        """
+        Use this method to send answers to an inline query. On success, *True* is returned.
+No more than **50** results per query are allowed.
+        https://core.telegram.org/bots/api/#answerinlinequery
+
+        :param results: A JSON-serialized array of results for the inline query
+        :type results: list[InlineQueryResult]
+
+        :param cache_time: The maximum amount of time in seconds that the result of the inline query may be cached on the server. Defaults to 300., defaults to None
+        :type cache_time: int, optional
+
+        :param is_personal: Pass *True*, if results may be cached on the server side only for the user that sent the query. By default, results may be returned to any user who sends the same query, defaults to None
+        :type is_personal: bool, optional
+
+        :param next_offset: Pass the offset that a client should send in the next query with the same text to receive more results. Pass an empty string if there are no more results or if you don't support pagination. Offset length can't exceed 64 bytes., defaults to None
+        :type next_offset: str, optional
+
+        :param switch_pm_text: If passed, clients will display a button with specified text that switches the user to a private chat with the bot and sends the bot a start message with the parameter *switch_pm_parameter*, defaults to None
+        :type switch_pm_text: str, optional
+
+        :param switch_pm_parameter: [Deep-linking](/bots#deep-linking) parameter for the /start message sent to the bot when user presses the switch button. 1-64 characters, only `A-Z`, `a-z`, `0-9`, `_` and `-` are allowed.
+
+*Example:* An inline bot that sends YouTube videos can ask the user to connect the bot to their YouTube account to adapt search results accordingly. To do this, it displays a 'Connect your YouTube account' button above the results, or even before showing any. The user presses the button, switches to a private chat with the bot and, in doing so, passes a start parameter that instructs the bot to return an OAuth link. Once done, the bot can offer a [*switch_inline*](https://core.telegram.org/bots/api/#inlinekeyboardmarkup) button so that the user can easily return to the chat where they wanted to use the bot's inline capabilities., defaults to None
+        :type switch_pm_parameter: str, optional
+
+        """
+        return await self.bot.answer_inline_query(
+            inline_query_id=self.id,
+            results=results,
+            cache_time=cache_time,
+            is_personal=is_personal,
+            next_offset=next_offset,
+            switch_pm_text=switch_pm_text,
+            switch_pm_parameter=switch_pm_parameter,
+        )
 
 
 class ChosenInlineResult(_BaseModel):
@@ -1404,6 +2194,21 @@ class CallbackQuery(_BaseModel):
     *Optional*. Short name of a [Game](https://core.telegram.org/bots/api/#games) to be returned, serves as the unique identifier for the game
     """
 
+    async def answer(
+            self,
+            text: str = None,
+            show_alert: bool = False,
+            url: str = None,
+            cache_time: int = 0,
+    ) -> bool:
+        return await self.bot.answer_callback_query(
+            callback_query_id=self.id,
+            text=text,
+            show_alert=show_alert,
+            url=url,
+            cache_time=cache_time
+        )
+
 
 class ShippingQuery(_BaseModel):
     """
@@ -1420,6 +2225,33 @@ class ShippingQuery(_BaseModel):
     Bot specified invoice payload
     """
     shipping_address: ShippingAddress
+
+    async def answer(
+            self,
+            ok: bool,
+            shipping_options: list[ShippingOption] = None,
+            error_message: str = None,
+    ) -> bool:
+        """
+        If you sent an invoice requesting a shipping address and the parameter *is_flexible* was specified, the Bot API will send an [Update](https://core.telegram.org/bots/api/#update) with a *shipping_query* field to the bot. Use this method to reply to shipping queries. On success, True is returned.
+        https://core.telegram.org/bots/api/#answershippingquery
+
+        :param ok: Specify True if delivery to the specified address is possible and False if there are any problems (for example, if delivery to the specified address is not possible)
+        :type ok: bool
+
+        :param shipping_options: Required if *ok* is True. A JSON-serialized array of available shipping options., defaults to None
+        :type shipping_options: list[ShippingOption], optional
+
+        :param error_message: Required if *ok* is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user., defaults to None
+        :type error_message: str, optional
+
+        """
+        return await self.bot.answer_shipping_query(
+            shipping_query_id=self.id,
+            ok=ok,
+            shipping_options=shipping_options,
+            error_message=error_message,
+        )
 
 
 class PreCheckoutQuery(_BaseModel):
@@ -1449,6 +2281,28 @@ class PreCheckoutQuery(_BaseModel):
     *Optional*. Identifier of the shipping option chosen by the user
     """
     order_info: typing.Optional[OrderInfo]
+
+    async def answer(
+            self,
+            ok: bool,
+            error_message: str = None,
+    ) -> bool:
+        """
+        Once the user has confirmed their payment and shipping details, the Bot API sends the final confirmation in the form of an [Update](https://core.telegram.org/bots/api/#update) with the field *pre_checkout_query*. Use this method to respond to such pre-checkout queries. On success, True is returned. **Note:** The Bot API must receive an answer within 10 seconds after the pre-checkout query was sent.
+        https://core.telegram.org/bots/api/#answerprecheckoutquery
+
+        :param ok: Specify *True* if everything is alright (goods are available, etc.) and the bot is ready to proceed with the order. Use *False* if there are any problems.
+        :type ok: bool
+
+        :param error_message: Required if *ok* is *False*. Error message in human readable form that explains the reason for failure to proceed with the checkout (e.g. "Sorry, somebody just bought the last of our amazing black T-shirts while you were busy filling out your payment details. Please choose a different color or garment!"). Telegram will display this message to the user., defaults to None
+        :type error_message: str, optional
+
+        """
+        return await self.bot.answer_pre_checkout_query(
+            pre_checkout_query_id=self.id,
+            ok=ok,
+            error_message=error_message,
+        )
 
 
 class PollAnswer(_BaseModel):
@@ -1481,14 +2335,6 @@ class ChatMemberUpdated(_BaseModel):
     old_chat_member: ChatMember
     new_chat_member: ChatMember
     invite_link: typing.Optional[ChatInviteLink]
-
-
-class ChatMember(_BaseModel):
-    """
-    This object contains information about one member of a chat. Currently, the following 6 types of chat members are supported:
-    """
-
-    pass
 
 
 class ChatInviteLink(_BaseModel):
@@ -1571,7 +2417,7 @@ class MessageId(_BaseModel):
 
 class UserProfilePhotos(_BaseModel):
     """
-    This object represent a user&#39;s profile pictures.
+    This object represent a user's profile pictures.
     """
 
     total_count: int
@@ -1597,7 +2443,7 @@ Maximum file size to download is 20 MB
     """
     file_unique_id: str
     """
-    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can&#39;t be used to download or reuse the file.
+    Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     """
     file_size: typing.Optional[int]
     """
@@ -1620,11 +2466,11 @@ class ReplyKeyboardMarkup(_BaseModel):
     """
     resize_keyboard: bool = False
     """
-    *Optional*. Requests clients to resize the keyboard vertically for optimal fit (e.g., make the keyboard smaller if there are just two rows of buttons). Defaults to *false*, in which case the custom keyboard is always of the same height as the app&#39;s standard keyboard.
+    *Optional*. Requests clients to resize the keyboard vertically for optimal fit (e.g., make the keyboard smaller if there are just two rows of buttons). Defaults to *false*, in which case the custom keyboard is always of the same height as the app's standard keyboard.
     """
     one_time_keyboard: bool = False
     """
-    *Optional*. Requests clients to hide the keyboard as soon as it&#39;s been used. The keyboard will still be available, but clients will automatically display the usual letter-keyboard in the chat – the user can press a special button in the input field to see the custom keyboard again. Defaults to *false*.
+    *Optional*. Requests clients to hide the keyboard as soon as it's been used. The keyboard will still be available, but clients will automatically display the usual letter-keyboard in the chat – the user can press a special button in the input field to see the custom keyboard again. Defaults to *false*.
     """
     input_field_placeholder: typing.Optional[str] = pydantic.Field(
         None,
@@ -1636,9 +2482,9 @@ class ReplyKeyboardMarkup(_BaseModel):
     """
     selective: typing.Optional[bool]
     """
-    *Optional*. Use this parameter if you want to show the keyboard to specific users only. Targets: 1) users that are @mentioned in the *text* of the [Message](https://core.telegram.org/bots/api/#message) object; 2) if the bot&#39;s message is a reply (has *reply_to_message_id*), sender of the original message.  
+    *Optional*. Use this parameter if you want to show the keyboard to specific users only. Targets: 1) users that are @mentioned in the *text* of the [Message](https://core.telegram.org/bots/api/#message) object; 2) if the bot's message is a reply (has *reply_to_message_id*), sender of the original message.  
 
-*Example:* A user requests to change the bot&#39;s language, bot replies to the request with a keyboard to select the new language. Other users in the group don&#39;t see the keyboard.
+*Example:* A user requests to change the bot's language, bot replies to the request with a keyboard to select the new language. Other users in the group don't see the keyboard.
     """
 
 
@@ -1653,11 +2499,11 @@ class KeyboardButton(_BaseModel):
     """
     request_contact: typing.Optional[bool]
     """
-    *Optional*. If *True*, the user&#39;s phone number will be sent as a contact when the button is pressed. Available in private chats only
+    *Optional*. If *True*, the user's phone number will be sent as a contact when the button is pressed. Available in private chats only
     """
     request_location: typing.Optional[bool]
     """
-    *Optional*. If *True*, the user&#39;s current location will be sent when the button is pressed. Available in private chats only
+    *Optional*. If *True*, the user's current location will be sent when the button is pressed. Available in private chats only
     """
     request_poll: typing.Optional[KeyboardButtonPollType]
 
@@ -1684,20 +2530,20 @@ class ReplyKeyboardRemove(_BaseModel):
     """
     selective: typing.Optional[bool]
     """
-    *Optional*. Use this parameter if you want to remove the keyboard for specific users only. Targets: 1) users that are @mentioned in the *text* of the [Message](https://core.telegram.org/bots/api/#message) object; 2) if the bot&#39;s message is a reply (has *reply_to_message_id*), sender of the original message.  
+    *Optional*. Use this parameter if you want to remove the keyboard for specific users only. Targets: 1) users that are @mentioned in the *text* of the [Message](https://core.telegram.org/bots/api/#message) object; 2) if the bot's message is a reply (has *reply_to_message_id*), sender of the original message.  
 
-*Example:* A user votes in a poll, bot returns confirmation message in reply to the vote and removes the keyboard for that user, while still showing the keyboard with poll options to users who haven&#39;t voted yet.
+*Example:* A user votes in a poll, bot returns confirmation message in reply to the vote and removes the keyboard for that user, while still showing the keyboard with poll options to users who haven't voted yet.
     """
 
 
 class ForceReply(_BaseModel):
     """
-    Upon receiving a message with this object, Telegram clients will display a reply interface to the user (act as if the user has selected the bot&#39;s message and tapped &#39;Reply&#39;). This can be extremely useful if you want to create user-friendly step-by-step interfaces without having to sacrifice [privacy mode](/bots#privacy-mode).
+    Upon receiving a message with this object, Telegram clients will display a reply interface to the user (act as if the user has selected the bot's message and tapped 'Reply'). This can be extremely useful if you want to create user-friendly step-by-step interfaces without having to sacrifice [privacy mode](/bots#privacy-mode).
     """
 
     force_reply: bool
     """
-    Shows reply interface to the user, as if they manually selected the bot&#39;s message and tapped &#39;Reply&#39;
+    Shows reply interface to the user, as if they manually selected the bot's message and tapped 'Reply'
     """
     input_field_placeholder: typing.Optional[str] = pydantic.Field(
         None,
@@ -1709,73 +2555,58 @@ class ForceReply(_BaseModel):
     """
     selective: typing.Optional[bool]
     """
-    *Optional*. Use this parameter if you want to force reply from specific users only. Targets: 1) users that are @mentioned in the *text* of the [Message](https://core.telegram.org/bots/api/#message) object; 2) if the bot&#39;s message is a reply (has *reply_to_message_id*), sender of the original message.
+    *Optional*. Use this parameter if you want to force reply from specific users only. Targets: 1) users that are @mentioned in the *text* of the [Message](https://core.telegram.org/bots/api/#message) object; 2) if the bot's message is a reply (has *reply_to_message_id*), sender of the original message.
     """
 
 
-class ChatMemberOwner(_BaseModel):
+class ChatMember(_BaseModel):
     """
-    Represents a [chat member](https://core.telegram.org/bots/api/#chatmember) that owns the chat and has all administrator privileges.
+    This object contains information about one member of a chat. Currently, the following 6 types of chat members are supported:
     """
-
-    status: str = "creator"
+    status: typing.Optional[str]
     """
-    The member&#39;s status in the chat, always “creator”
+    The member's status in the chat
     """
     user: User
-    is_anonymous: bool
+
+    # Owner and Admin fields
+    is_anonymous: typing.Optional[bool]
     """
-    True, if the user&#39;s presence in the chat is hidden
+    True, if the user's presence in the chat is hidden
     """
     custom_title: typing.Optional[str]
     """
     *Optional*. Custom title for this user
     """
-
-
-class ChatMemberAdministrator(_BaseModel):
-    """
-    Represents a [chat member](https://core.telegram.org/bots/api/#chatmember) that has some additional privileges.
-    """
-
-    status: str = "administrator"
-    """
-    The member&#39;s status in the chat, always “administrator”
-    """
-    user: User
-    can_be_edited: bool
+    can_be_edited: typing.Optional[bool]
     """
     True, if the bot is allowed to edit administrator privileges of that user
     """
-    is_anonymous: bool
-    """
-    True, if the user&#39;s presence in the chat is hidden
-    """
-    can_manage_chat: bool
+    can_manage_chat: typing.Optional[bool]
     """
     True, if the administrator can access the chat event log, chat statistics, message statistics in channels, see channel members, see anonymous administrators in supergroups and ignore slow mode. Implied by any other administrator privilege
     """
-    can_delete_messages: bool
+    can_delete_messages: typing.Optional[bool]
     """
     True, if the administrator can delete messages of other users
     """
-    can_manage_voice_chats: bool
+    can_manage_voice_chats: typing.Optional[bool]
     """
     True, if the administrator can manage voice chats
     """
-    can_restrict_members: bool
+    can_restrict_members: typing.Optional[bool]
     """
     True, if the administrator can restrict, ban or unban chat members
     """
-    can_promote_members: bool
+    can_promote_members: typing.Optional[bool]
     """
     True, if the administrator can add new administrators with a subset of their own privileges or demote administrators that he has promoted, directly or indirectly (promoted by administrators that were appointed by the user)
     """
-    can_change_info: bool
+    can_change_info: typing.Optional[bool]
     """
     True, if the user is allowed to change the chat title, photo and other settings
     """
-    can_invite_users: bool
+    can_invite_users: typing.Optional[bool]
     """
     True, if the user is allowed to invite new users to the chat
     """
@@ -1791,101 +2622,47 @@ class ChatMemberAdministrator(_BaseModel):
     """
     *Optional*. True, if the user is allowed to pin messages; groups and supergroups only
     """
-    custom_title: typing.Optional[str]
-    """
-    *Optional*. Custom title for this user
-    """
 
-
-class ChatMemberMember(_BaseModel):
-    """
-    Represents a [chat member](https://core.telegram.org/bots/api/#chatmember) that has no additional privileges or restrictions.
-    """
-
-    status: str = "member"
-    """
-    The member&#39;s status in the chat, always “member”
-    """
-    user: User
-
-
-class ChatMemberRestricted(_BaseModel):
-    """
-    Represents a [chat member](https://core.telegram.org/bots/api/#chatmember) that is under certain restrictions in the chat. Supergroups only.
-    """
-
-    status: str = "restricted"
-    """
-    The member&#39;s status in the chat, always “restricted”
-    """
-    user: User
-    is_member: bool
+    # For restricted only
+    is_member: typing.Optional[bool]
     """
     True, if the user is a member of the chat at the moment of the request
     """
-    can_change_info: bool
+    can_change_info: typing.Optional[bool]
     """
     True, if the user is allowed to change the chat title, photo and other settings
     """
-    can_invite_users: bool
+    can_invite_users: typing.Optional[bool]
     """
     True, if the user is allowed to invite new users to the chat
     """
-    can_pin_messages: bool
+    can_pin_messages: typing.Optional[bool]
     """
     True, if the user is allowed to pin messages
     """
-    can_send_messages: bool
+    can_send_messages: typing.Optional[bool]
     """
     True, if the user is allowed to send text messages, contacts, locations and venues
     """
-    can_send_media_messages: bool
+    can_send_media_messages: typing.Optional[bool]
     """
     True, if the user is allowed to send audios, documents, photos, videos, video notes and voice notes
     """
-    can_send_polls: bool
+    can_send_polls: typing.Optional[bool]
     """
     True, if the user is allowed to send polls
     """
-    can_send_other_messages: bool
+    can_send_other_messages: typing.Optional[bool]
     """
     True, if the user is allowed to send animations, games, stickers and use inline bots
     """
-    can_add_web_page_previews: bool
+    can_add_web_page_previews: typing.Optional[bool]
     """
     True, if the user is allowed to add web page previews to their messages
     """
-    until_date: int
+    until_date: typing.Optional[int]
     """
     Date when restrictions will be lifted for this user; unix time. If 0, then the user is restricted forever
-    """
-
-
-class ChatMemberLeft(_BaseModel):
-    """
-    Represents a [chat member](https://core.telegram.org/bots/api/#chatmember) that isn&#39;t currently a member of the chat, but may join it themselves.
-    """
-
-    status: str = "left"
-    """
-    The member&#39;s status in the chat, always “left”
-    """
-    user: User
-
-
-class ChatMemberBanned(_BaseModel):
-    """
-    Represents a [chat member](https://core.telegram.org/bots/api/#chatmember) that was banned in the chat and can&#39;t return to the chat or view chat messages.
-    """
-
-    status: str = "kicked"
-    """
-    The member&#39;s status in the chat, always “kicked”
-    """
-    user: User
-    until_date: int
-    """
-    Date when restrictions will be lifted for this user; unix time. If 0, then the user is banned forever
     """
 
 
@@ -1910,14 +2687,6 @@ class BotCommand(_BaseModel):
     """
     Description of the command, 3-256 characters.
     """
-
-
-class BotCommandScope(_BaseModel):
-    """
-    This object represents the scope to which bot commands are applied. Currently, the following 7 scopes are supported:
-    """
-
-    pass
 
 
 class BotCommandScopeDefault(_BaseModel):
@@ -2013,12 +2782,23 @@ class BotCommandScopeChatMember(_BaseModel):
     """
 
 
-class InputMedia(_BaseModel):
+BotCommandScope = typing.Union[
+    BotCommandScopeDefault,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllChatAdministrators,
+    BotCommandScopeChat,
+    BotCommandScopeChatAdministrators,
+    BotCommandScopeChatMember,
+]
+
+
+class InputFile(_BaseModel):
     """
-    This object represents the content of a media message to be sent. It should be one of
+    This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
     """
 
-    pass
+    path: str
 
 
 class InputMediaPhoto(_BaseModel):
@@ -2067,7 +2847,7 @@ class InputMediaVideo(_BaseModel):
     """
     thumb: typing.Optional[typing.Union[InputFile, str]]
     """
-    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail&#39;s width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can&#39;t be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
+    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail's width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can't be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
     """
     caption: typing.Optional[str] = pydantic.Field(
         None,
@@ -2103,20 +2883,7 @@ class InputMediaVideo(_BaseModel):
     """
 
 
-class InputFile(_BaseModel):
-    """
-    This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
-    """
-
-    path: str
-
-    # @pydantic.root_validator(pre=True)
-    # def check_card_number_omitted(cls, values):
-    #     assert 'path' in values or 'io' in values, 'either path or io should be specified'
-    #     return values
-
-
-class InputMediaAnimation(_BaseModel):
+class InputMediaAnimation(InputFile):
     """
     Represents an animation file (GIF or H.264/MPEG-4 AVC video without sound) to be sent.
     """
@@ -2131,7 +2898,7 @@ class InputMediaAnimation(_BaseModel):
     """
     thumb: typing.Optional[typing.Union[InputFile, str]]
     """
-    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail&#39;s width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can&#39;t be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
+    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail's width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can't be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
     """
     caption: typing.Optional[str] = pydantic.Field(
         None,
@@ -2178,7 +2945,7 @@ class InputMediaAudio(_BaseModel):
     """
     thumb: typing.Optional[typing.Union[InputFile, str]]
     """
-    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail&#39;s width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can&#39;t be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
+    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail's width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can't be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
     """
     caption: typing.Optional[str] = pydantic.Field(
         None,
@@ -2225,7 +2992,7 @@ class InputMediaDocument(_BaseModel):
     """
     thumb: typing.Optional[typing.Union[InputFile, str]]
     """
-    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail&#39;s width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can&#39;t be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
+    *Optional*. Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side. The thumbnail should be in JPEG format and less than 200 kB in size. A thumbnail's width and height should not exceed 320. Ignored if the file is not uploaded using multipart/form-data. Thumbnails can't be reused and can be only uploaded as a new file, so you can pass “attach://\&lt;file_attach_name\&gt;” if the thumbnail was uploaded using multipart/form-data under \&lt;file_attach_name\&gt;. [More info on Sending Files »](https://core.telegram.org/bots/api/#sending-files)
     """
     caption: typing.Optional[str] = pydantic.Field(
         None,
@@ -2247,6 +3014,15 @@ class InputMediaDocument(_BaseModel):
     """
     *Optional*. Disables automatic server-side content type detection for files uploaded using multipart/form-data. Always true, if the document is sent as part of an album.
     """
+
+
+InputMedia = typing.Union[
+    InputMediaPhoto,
+    InputMediaVideo,
+    InputMediaAnimation,
+    InputMediaAudio,
+    InputMediaDocument
+]
 
 
 class StickerSet(_BaseModel):
@@ -2277,14 +3053,6 @@ class StickerSet(_BaseModel):
     thumb: typing.Optional[PhotoSize]
 
 
-class InlineQueryResult(_BaseModel):
-    """
-    This object represents one result of an inline query. Telegram clients currently support results of the following 20 types:
-    """
-
-    pass
-
-
 class InlineQueryResultArticle(_BaseModel):
     """
     Represents a link to an article or web page.
@@ -2310,7 +3078,7 @@ class InlineQueryResultArticle(_BaseModel):
     """
     hide_url: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if you don&#39;t want the URL to be shown in the message
+    *Optional*. Pass *True*, if you don't want the URL to be shown in the message
     """
     description: typing.Optional[str]
     """
@@ -2328,14 +3096,6 @@ class InlineQueryResultArticle(_BaseModel):
     """
     *Optional*. Thumbnail height
     """
-
-
-class InputMessageContent(_BaseModel):
-    """
-    This object represents the content of a message to be sent as a result of an inline query. Telegram clients currently support the following 5 types:
-    """
-
-    pass
 
 
 class InlineQueryResultPhoto(_BaseModel):
@@ -2872,15 +3632,15 @@ class InlineQueryResultContact(_BaseModel):
     """
     phone_number: str
     """
-    Contact&#39;s phone number
+    Contact's phone number
     """
     first_name: str
     """
-    Contact&#39;s first name
+    Contact's first name
     """
     last_name: typing.Optional[str]
     """
-    *Optional*. Contact&#39;s last name
+    *Optional*. Contact's last name
     """
     vcard: typing.Optional[str]
     """
@@ -3238,6 +3998,30 @@ class InlineQueryResultCachedAudio(_BaseModel):
     input_message_content: typing.Optional[InputMessageContent]
 
 
+InlineQueryResult = typing.Union[
+    InlineQueryResultArticle,
+    InlineQueryResultPhoto,
+    InlineQueryResultGif,
+    InlineQueryResultMpeg4Gif,
+    InlineQueryResultVideo,
+    InlineQueryResultAudio,
+    InlineQueryResultVoice,
+    InlineQueryResultDocument,
+    InlineQueryResultLocation,
+    InlineQueryResultVenue,
+    InlineQueryResultContact,
+    InlineQueryResultGame,
+    InlineQueryResultCachedPhoto,
+    InlineQueryResultCachedGif,
+    InlineQueryResultCachedMpeg4Gif,
+    InlineQueryResultCachedSticker,
+    InlineQueryResultCachedDocument,
+    InlineQueryResultCachedVideo,
+    InlineQueryResultCachedVoice,
+    InlineQueryResultCachedAudio,
+]
+
+
 class InputTextMessageContent(_BaseModel):
     """
     Represents the [content](https://core.telegram.org/bots/api/#inputmessagecontent) of a text message to be sent as the result of an inline query.
@@ -3342,15 +4126,15 @@ class InputContactMessageContent(_BaseModel):
 
     phone_number: str
     """
-    Contact&#39;s phone number
+    Contact's phone number
     """
     first_name: str
     """
-    Contact&#39;s first name
+    Contact's first name
     """
     last_name: typing.Optional[str]
     """
-    *Optional*. Contact&#39;s last name
+    *Optional*. Contact's last name
     """
     vcard: typing.Optional[str]
     """
@@ -3425,32 +4209,41 @@ class InputInvoiceMessageContent(_BaseModel):
     """
     need_name: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if you require the user&#39;s full name to complete the order
+    *Optional*. Pass *True*, if you require the user's full name to complete the order
     """
     need_phone_number: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if you require the user&#39;s phone number to complete the order
+    *Optional*. Pass *True*, if you require the user's phone number to complete the order
     """
     need_email: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if you require the user&#39;s email address to complete the order
+    *Optional*. Pass *True*, if you require the user's email address to complete the order
     """
     need_shipping_address: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if you require the user&#39;s shipping address to complete the order
+    *Optional*. Pass *True*, if you require the user's shipping address to complete the order
     """
     send_phone_number_to_provider: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if user&#39;s phone number should be sent to provider
+    *Optional*. Pass *True*, if user's phone number should be sent to provider
     """
     send_email_to_provider: typing.Optional[bool]
     """
-    *Optional*. Pass *True*, if user&#39;s email address should be sent to provider
+    *Optional*. Pass *True*, if user's email address should be sent to provider
     """
     is_flexible: typing.Optional[bool]
     """
     *Optional*. Pass *True*, if the final price depends on the shipping method
     """
+
+
+InputMessageContent = typing.Union[
+    InputTextMessageContent,
+    InputLocationMessageContent,
+    InputVenueMessageContent,
+    InputContactMessageContent,
+    InputInvoiceMessageContent,
+]
 
 
 class LabeledPrice(_BaseModel):
@@ -3487,17 +4280,9 @@ class ShippingOption(_BaseModel):
     """
 
 
-class PassportElementError(_BaseModel):
-    """
-    This object represents an error in the Telegram Passport element which was submitted that should be resolved by the user. It should be one of:
-    """
-
-    pass
-
-
 class PassportElementErrorDataField(_BaseModel):
     """
-    Represents an issue in one of the data fields that was provided by the user. The error is considered resolved when the field&#39;s value changes.
+    Represents an issue in one of the data fields that was provided by the user. The error is considered resolved when the field's value changes.
     """
 
     source: str = "data"
@@ -3506,7 +4291,7 @@ class PassportElementErrorDataField(_BaseModel):
     """
     type: str
     """
-    The section of the user&#39;s Telegram Passport which has the error, one of “personal_details”, “passport”, “driver_license”, “identity_card”, “internal_passport”, “address”
+    The section of the user's Telegram Passport which has the error, one of “personal_details”, “passport”, “driver_license”, “identity_card”, “internal_passport”, “address”
     """
     field_name: str
     """
@@ -3533,7 +4318,7 @@ class PassportElementErrorFrontSide(_BaseModel):
     """
     type: str
     """
-    The section of the user&#39;s Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”
+    The section of the user's Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”
     """
     file_hash: str
     """
@@ -3556,7 +4341,7 @@ class PassportElementErrorReverseSide(_BaseModel):
     """
     type: str
     """
-    The section of the user&#39;s Telegram Passport which has the issue, one of “driver_license”, “identity_card”
+    The section of the user's Telegram Passport which has the issue, one of “driver_license”, “identity_card”
     """
     file_hash: str
     """
@@ -3579,7 +4364,7 @@ class PassportElementErrorSelfie(_BaseModel):
     """
     type: str
     """
-    The section of the user&#39;s Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”
+    The section of the user's Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”
     """
     file_hash: str
     """
@@ -3602,7 +4387,7 @@ class PassportElementErrorFile(_BaseModel):
     """
     type: str
     """
-    The section of the user&#39;s Telegram Passport which has the issue, one of “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
+    The section of the user's Telegram Passport which has the issue, one of “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
     """
     file_hash: str
     """
@@ -3625,7 +4410,7 @@ class PassportElementErrorFiles(_BaseModel):
     """
     type: str
     """
-    The section of the user&#39;s Telegram Passport which has the issue, one of “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
+    The section of the user's Telegram Passport which has the issue, one of “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
     """
     file_hashes: list[str]
     """
@@ -3648,7 +4433,7 @@ class PassportElementErrorTranslationFile(_BaseModel):
     """
     type: str
     """
-    Type of element of the user&#39;s Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”, “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
+    Type of element of the user's Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”, “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
     """
     file_hash: str
     """
@@ -3671,7 +4456,7 @@ class PassportElementErrorTranslationFiles(_BaseModel):
     """
     type: str
     """
-    Type of element of the user&#39;s Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”, “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
+    Type of element of the user's Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”, “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
     """
     file_hashes: list[str]
     """
@@ -3694,7 +4479,7 @@ class PassportElementErrorUnspecified(_BaseModel):
     """
     type: str
     """
-    Type of element of the user&#39;s Telegram Passport which has the issue
+    Type of element of the user's Telegram Passport which has the issue
     """
     element_hash: str
     """
@@ -3704,6 +4489,19 @@ class PassportElementErrorUnspecified(_BaseModel):
     """
     Error message
     """
+
+
+PassportElementError = typing.Union[
+    PassportElementErrorDataField,
+    PassportElementErrorFrontSide,
+    PassportElementErrorReverseSide,
+    PassportElementErrorSelfie,
+    PassportElementErrorFile,
+    PassportElementErrorFiles,
+    PassportElementErrorTranslationFile,
+    PassportElementErrorTranslationFiles,
+    PassportElementErrorUnspecified,
+]
 
 
 class GameHighScore(_BaseModel):
@@ -3783,14 +4581,7 @@ KeyboardButton.update_forward_refs()
 KeyboardButtonPollType.update_forward_refs()
 ReplyKeyboardRemove.update_forward_refs()
 ForceReply.update_forward_refs()
-ChatMemberOwner.update_forward_refs()
-ChatMemberAdministrator.update_forward_refs()
-ChatMemberMember.update_forward_refs()
-ChatMemberRestricted.update_forward_refs()
-ChatMemberLeft.update_forward_refs()
-ChatMemberBanned.update_forward_refs()
 BotCommand.update_forward_refs()
-BotCommandScope.update_forward_refs()
 BotCommandScopeDefault.update_forward_refs()
 BotCommandScopeAllPrivateChats.update_forward_refs()
 BotCommandScopeAllGroupChats.update_forward_refs()
@@ -3798,7 +4589,6 @@ BotCommandScopeAllChatAdministrators.update_forward_refs()
 BotCommandScopeChat.update_forward_refs()
 BotCommandScopeChatAdministrators.update_forward_refs()
 BotCommandScopeChatMember.update_forward_refs()
-InputMedia.update_forward_refs()
 InputMediaPhoto.update_forward_refs()
 InputMediaVideo.update_forward_refs()
 InputFile.update_forward_refs()
@@ -3806,9 +4596,7 @@ InputMediaAnimation.update_forward_refs()
 InputMediaAudio.update_forward_refs()
 InputMediaDocument.update_forward_refs()
 StickerSet.update_forward_refs()
-InlineQueryResult.update_forward_refs()
 InlineQueryResultArticle.update_forward_refs()
-InputMessageContent.update_forward_refs()
 InlineQueryResultPhoto.update_forward_refs()
 InlineQueryResultGif.update_forward_refs()
 InlineQueryResultMpeg4Gif.update_forward_refs()
@@ -3835,7 +4623,6 @@ InputContactMessageContent.update_forward_refs()
 InputInvoiceMessageContent.update_forward_refs()
 LabeledPrice.update_forward_refs()
 ShippingOption.update_forward_refs()
-PassportElementError.update_forward_refs()
 PassportElementErrorDataField.update_forward_refs()
 PassportElementErrorFrontSide.update_forward_refs()
 PassportElementErrorReverseSide.update_forward_refs()
