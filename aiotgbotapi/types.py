@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing
 from decimal import Decimal
-from io import BytesIO
 
 import pydantic
 import ujson
@@ -12,6 +11,8 @@ from .errors import TelegramException
 
 
 class _BaseModel(pydantic.BaseModel):
+    EXTRA: dict = {}
+
     class Config:
         allow_population_by_field_name = True
         json_dumps = ujson.dumps
@@ -272,6 +273,17 @@ class User(_BaseModel):
     """
     *Optional*. True, if the bot supports inline queries. Returned only in [getMe](https://core.telegram.org/bots/api/#getme).
     """
+
+    @property
+    def full_name(self):
+        if bool(self.last_name):
+            return f"{self.first_name} {self.last_name}"
+
+        return self.first_name
+
+    @property
+    def mention(self):
+        return f"<a href='tg://user?id={self.id}'>{self.full_name}</a>"
 
 
 class Chat(_BaseModel):
@@ -3834,3 +3846,16 @@ PassportElementErrorTranslationFile.update_forward_refs()
 PassportElementErrorTranslationFiles.update_forward_refs()
 PassportElementErrorUnspecified.update_forward_refs()
 GameHighScore.update_forward_refs()
+
+# Some helpers
+SomeUpdate = typing.Union[
+    Message,
+    InlineQuery,
+    ChosenInlineResult,
+    CallbackQuery,
+    ShippingQuery,
+    PreCheckoutQuery,
+    Poll,
+    PollAnswer,
+    ChatMemberUpdated
+]
