@@ -378,7 +378,7 @@ class MessagesuccessfulPaymentFilter(_BaseModelFilter):
         return bool(message.successful_payment)
 
 
-class BotCommandFilter(MessageTextFilter):
+class CommandFilter(MessageTextFilter):
     data_filter = True
     command: str = None
 
@@ -445,5 +445,5 @@ class Filters:
     successful_payment = MessagesuccessfulPaymentFilter()
 
     # "Callable" filters
-    bot_command = BotCommandFilter
+    command = CommandFilter
     regex = RegexFilter

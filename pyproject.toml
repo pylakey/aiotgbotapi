@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiotgbotapi"
-version = "0.1.0"
+version = "0.1.1"
 description = "Asynchronous Telegram BOT API Client"
 authors = ["Pylakey <pylakey@protonmail.com>"]
 license = "MIT"
@@ -23,15 +23,13 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-# API Client part
 httpx = {extras = ["http2"], version = "^0.20.0"}
 pydantic = "^1.8.2"
 ujson = "^4.2.0"
-# WebHook part
 fastapi = "^0.70.0"
-httptools = "^0.3.0"
-uvicorn = "^0.15.0"
-uvloop = "^0.16.0"
+#httptools = "^0.3.0"
+#uvicorn = "^0.15.0"
+#uvloop = "^0.16.0"
 
 [tool.poetry.dev-dependencies]
 

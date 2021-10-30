@@ -1,7 +1,5 @@
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
-from . import errors
+from . import filters
 from . import types
 from .bot import Bot
-from .errors import *
-from .types import *

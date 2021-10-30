@@ -47,7 +47,6 @@ from .types import (
 
 
 class Bot(BotAPIClient):
-    loop: asyncio.AbstractEventLoop = None
     __running = False
     __updates_handlers: dict[str, set[Handler]] = {
         "message": set(),
@@ -67,10 +66,18 @@ class Bot(BotAPIClient):
     __middlewares: list[MiddlewareCallable] = []
     __prepared_middlewares: list[MiddlewareCallable] = []
 
-    def __init__(self, bot_token: str):
+    def __init__(
+            self,
+            bot_token: str,
+            *,
+            polling_timeout: int = 0,
+            polling_allowed_updates: list[str] = None
+    ):
         super(Bot, self).__init__(bot_token)
         self.logger = logging.getLogger(self.__class__.__qualname__)
         self.bot_token = bot_token
+        self.polling_timeout = polling_timeout
+        self.polling_allowed_updates = polling_allowed_updates
 
     # Magic methods
     async def __aenter__(self):
@@ -87,7 +94,7 @@ class Bot(BotAPIClient):
         try:
             await handler(self, update)
         except Exception as e:
-            self.logger.error(e, exc_info=True)
+            self.logger.error(f"Unable to call handler {handler} for update: {update.json()}. {e}", exc_info=True)
 
     async def __call_handlers(self, update: Update):
         tasks = []
@@ -119,51 +126,43 @@ class Bot(BotAPIClient):
 
         return await call_next(self, update)
 
-    async def __updates_loop(self):
+    async def run_webhook_server(self):
+        raise NotImplementedError
+
+    async def run_long_polling(self):
+        self.logger.info('Start polling updates')
+
         try:
             last_received_update_id = -1
 
             while self.__running:
                 updates = await self.get_updates(
                     offset=last_received_update_id + 1,
-                    timeout=2
+                    timeout=self.polling_timeout,
+                    allowed_updates=self.polling_allowed_updates
                 )
 
                 for update in updates:
                     last_received_update_id = update.update_id
-                    self.loop.create_task(self.__handle_update(update))
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            raise
-        except Exception as e:
-            self.logger.error(f'Unhandled exception occurred!. {e.__class__.__qualname__}. {e}', exc_info=True)
+                    asyncio.create_task(self.__handle_update(update))
+
+                await asyncio.sleep(0.01)
+        finally:
+            self.logger.info('Stop polling')
 
     async def start(self):
         self.logger.info('Starting bot')
-        # Setting up asyncio stuff
-        self.loop = asyncio.get_running_loop()
-        # Preparing middlewares handlers
         self.__prepare_middlewares_handlers()
-        # Starting updates loop
         self.__running = True
-        self.loop.create_task(self.__updates_loop())
 
     async def stop(self):
         self.logger.info('Stopping Bot...')
         self.__running = False
 
-    async def idle(self):
-        try:
-            while True:
-                await asyncio.sleep(0.1)
-        finally:
-            self.logger.info('Stop Idling...')
-
-    async def _run(self):
+    async def run(self):
         async with self:
-            await self.idle()
-
-    def run(self):
-        asyncio.run(self._run())
+            # TODO: Add option to run webhook server instead of long polling
+            await self.run_long_polling()
 
     def add_middleware(self, middleware: MiddlewareCallable):
         if self.__running:
@@ -175,39 +174,52 @@ class Bot(BotAPIClient):
     def add_update_handler(
             self,
             function: HandlerCallable,
-            update_type: str = '*',
+            update_type: str,
             *,
             filters: AnyFilterCallable = None
-    ):
+    ) -> Handler:
         if self.__running:
             raise RuntimeError("Unable to add middleware in already running bot instance!")
 
         if self.__updates_handlers.get(update_type) is None:
             raise ValueError(f'Unsupported update type: {update_type}!')
 
-        self.__updates_handlers[update_type].add(Handler(function, filters=filters))
+        handler = Handler(function, update_type, filters=filters)
+        self.__updates_handlers[update_type].add(handler)
+        return handler
 
-    def on_update(self, update_type: str = '*', *, filters: AnyFilterCallable = None):
+    def remove_update_handler(self, handler: Handler):
+        try:
+            self.__updates_handlers[handler.update_type].remove(handler)
+        except KeyError:
+            raise ValueError(f'{handler} is not registered as handler')
+
+    def on_update(self, update_type: str, *, filters: AnyFilterCallable = None):
         def decorator(function: HandlerCallable) -> HandlerCallable:
             self.add_update_handler(function, update_type, filters=filters)
             return function
 
         return decorator
 
-    def add_message_handler(self, function: MessageHandler, *, filters: MessageFilterCallable):
-        self.add_update_handler(function, "message", filters=filters)
+    def add_message_handler(self, function: MessageHandler, *, filters: MessageFilterCallable) -> Handler:
+        return self.add_update_handler(function, "message", filters=filters)
 
     def on_message(self, *, filters: MessageFilterCallable):
         return self.on_update('message', filters=filters)
 
-    def add_edited_message_handler(self, function: EditedMessageHandler, *, filters: EditedMessageFilterCallable):
-        self.add_update_handler(function, "edited_message", filters=filters)
+    def add_edited_message_handler(
+            self,
+            function: EditedMessageHandler,
+            *,
+            filters: EditedMessageFilterCallable
+    ) -> Handler:
+        return self.add_update_handler(function, "edited_message", filters=filters)
 
     def on_edited_message(self, *, filters: EditedMessageFilterCallable):
         return self.on_update('edited_message', filters=filters)
 
-    def add_channel_post_handler(self, function: ChannelPostHandler, *, filters: ChannelPostFilterCallable):
-        self.add_update_handler(function, "channel_post", filters=filters)
+    def add_channel_post_handler(self, function: ChannelPostHandler, *, filters: ChannelPostFilterCallable) -> Handler:
+        return self.add_update_handler(function, "channel_post", filters=filters)
 
     def on_channel_post(self, *, filters: ChannelPostFilterCallable):
         return self.on_update('channel_post', filters=filters)
@@ -217,14 +229,14 @@ class Bot(BotAPIClient):
             function: EditedChannelPostHandler,
             *,
             filters: EditedChannelPostFilterCallable
-    ):
-        self.add_update_handler(function, "edited_channel_post", filters=filters)
+    ) -> Handler:
+        return self.add_update_handler(function, "edited_channel_post", filters=filters)
 
     def on_edited_channel_post(self, *, filters: EditedChannelPostFilterCallable):
         return self.on_update('edited_channel_post', filters=filters)
 
-    def add_inline_query_handler(self, function: InlineQueryHandler, *, filters: InlineQueryFilterCallable):
-        self.add_update_handler(function, "inline_query", filters=filters)
+    def add_inline_query_handler(self, function: InlineQueryHandler, *, filters: InlineQueryFilterCallable) -> Handler:
+        return self.add_update_handler(function, "inline_query", filters=filters)
 
     def on_inline_query(self, *, filters: InlineQueryFilterCallable):
         return self.on_update('inline_query', filters=filters)
@@ -234,20 +246,30 @@ class Bot(BotAPIClient):
             function: ChosenInlineResultHandler,
             *,
             filters: ChosenInlineResultFilterCallable
-    ):
-        self.add_update_handler(function, "chosen_inline_result", filters=filters)
+    ) -> Handler:
+        return self.add_update_handler(function, "chosen_inline_result", filters=filters)
 
     def on_chosen_inline_result(self, *, filters: ChosenInlineResultFilterCallable):
         return self.on_update('chosen_inline_result', filters=filters)
 
-    def add_callback_query_handler(self, function: CallbackQueryHandler, *, filters: CallbackQueryFilterCallable):
-        self.add_update_handler(function, "callback_query", filters=filters)
+    def add_callback_query_handler(
+            self,
+            function: CallbackQueryHandler,
+            *,
+            filters: CallbackQueryFilterCallable
+    ) -> Handler:
+        return self.add_update_handler(function, "callback_query", filters=filters)
 
     def on_callback_query(self, *, filters: CallbackQueryFilterCallable):
         return self.on_update('callback_query', filters=filters)
 
-    def add_shipping_query_handler(self, function: ShippingQueryHandler, *, filters: ShippingQueryFilterCallable):
-        self.add_update_handler(function, "shipping_query", filters=filters)
+    def add_shipping_query_handler(
+            self,
+            function: ShippingQueryHandler,
+            *,
+            filters: ShippingQueryFilterCallable
+    ) -> Handler:
+        return self.add_update_handler(function, "shipping_query", filters=filters)
 
     def on_shipping_query(self, *, filters: ShippingQueryFilterCallable):
         return self.on_update('shipping_query', filters=filters)
@@ -257,32 +279,37 @@ class Bot(BotAPIClient):
             function: PreCheckoutQueryHandler,
             *,
             filters: PreCheckoutQueryFilterCallable
-    ):
-        self.add_update_handler(function, "pre_checkout_query", filters=filters)
+    ) -> Handler:
+        return self.add_update_handler(function, "pre_checkout_query", filters=filters)
 
     def on_pre_checkout_query(self, *, filters: PreCheckoutQueryFilterCallable):
         return self.on_update('pre_checkout_query', filters=filters)
 
-    def add_poll_handler(self, function: PollHandler, *, filters: PollFilterCallable):
-        self.add_update_handler(function, "poll", filters=filters)
+    def add_poll_handler(self, function: PollHandler, *, filters: PollFilterCallable) -> Handler:
+        return self.add_update_handler(function, "poll", filters=filters)
 
     def on_poll(self, *, filters: PollFilterCallable):
         return self.on_update('poll', filters=filters)
 
-    def add_poll_answer_handler(self, function: PollAnswerHandler, *, filters: PollAnswerFilterCallable):
-        self.add_update_handler(function, "poll_answer", filters=filters)
+    def add_poll_answer_handler(self, function: PollAnswerHandler, *, filters: PollAnswerFilterCallable) -> Handler:
+        return self.add_update_handler(function, "poll_answer", filters=filters)
 
     def on_poll_answer(self, *, filters: PollAnswerFilterCallable):
         return self.on_update('poll_answer', filters=filters)
 
-    def add_my_chat_member_handler(self, function: MyChatMemberHandler, *, filters: MyChatMemberFilterCallable):
-        self.add_update_handler(function, "my_chat_member", filters=filters)
+    def add_my_chat_member_handler(
+            self,
+            function: MyChatMemberHandler,
+            *,
+            filters: MyChatMemberFilterCallable
+    ) -> Handler:
+        return self.add_update_handler(function, "my_chat_member", filters=filters)
 
     def on_my_chat_member(self, *, filters: MyChatMemberFilterCallable):
         return self.on_update('my_chat_member', filters=filters)
 
-    def add_chat_member_handler(self, function: ChatMemberHandler, *, filters: ChatMemberFilterCallable):
-        self.add_update_handler(function, "chat_member", filters=filters)
+    def add_chat_member_handler(self, function: ChatMemberHandler, *, filters: ChatMemberFilterCallable) -> Handler:
+        return self.add_update_handler(function, "chat_member", filters=filters)
 
     def on_chat_member(self, *, filters: ChatMemberFilterCallable):
         return self.on_update('chat_member', filters=filters)
@@ -307,12 +334,19 @@ MiddlewareCallable = Callable[[Bot, SomeUpdate, HandlerCallable], Coroutine[Any,
 
 
 class Handler(object):
-    def __init__(self, function: HandlerCallable, *, filters: BaseFilter = None):
+    def __init__(
+            self,
+            function: HandlerCallable,
+            update_type: str,
+            *,
+            filters: Optional[AnyFilterCallable] = None
+    ):
         if filters is not None and not isinstance(filters, BaseFilter):
             raise ValueError('filters should be an instance of BaseFilter!')
 
-        self.function: HandlerCallable = function
-        self.filters: Optional[AnyFilterCallable] = filters
+        self.function = function
+        self.update_type = update_type
+        self.filters = filters
 
     async def __call__(self, client: Bot, update: SomeUpdate):
         if callable(self.filters):
@@ -325,3 +359,6 @@ class Handler(object):
                 update.EXTRA |= filter_result
 
         return await self.function(client, update)
+
+    def __hash__(self):
+        return self.function.__hash__()
