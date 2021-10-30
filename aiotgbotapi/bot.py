@@ -73,11 +73,15 @@ class Bot(BotAPIClient):
         self.bot_token = bot_token
 
     # Magic methods
-    async def __aenter__(self) -> Bot:
-        return await self.start()
+    async def __aenter__(self):
+        await self.start()
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.stop()
+
+    def __prepare_middlewares_handlers(self):
+        self.__prepared_middlewares = list(reversed(self.__middlewares))
 
     async def __call_handler(self, handler: Handler, update: SomeUpdate):
         try:
@@ -99,9 +103,6 @@ class Bot(BotAPIClient):
 
         # Running all handlers concurrently and independently
         await asyncio.gather(*tasks, return_exceptions=True)
-
-    def __prepare_middlewares_handlers(self):
-        self.__prepared_middlewares = list(reversed(self.__middlewares))
 
     async def __handle_update(self, update: Update):
         if len(self.__prepared_middlewares) == 0:
@@ -135,7 +136,7 @@ class Bot(BotAPIClient):
         except Exception as e:
             self.logger.error(f'Unhandled exception occurred!. {e.__class__.__qualname__}. {e}', exc_info=True)
 
-    async def start(self) -> Bot:
+    async def start(self):
         self.logger.info('Starting bot')
         # Setting up asyncio stuff
         self.loop = asyncio.get_running_loop()
@@ -144,7 +145,6 @@ class Bot(BotAPIClient):
         # Starting updates loop
         self.__running = True
         self.loop.create_task(self.__updates_loop())
-        return self
 
     async def stop(self):
         self.logger.info('Stopping Bot...')
