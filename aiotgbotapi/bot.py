@@ -13,6 +13,10 @@ from typing import (
     Optional,
 )
 
+import pydantic
+import uvicorn
+from fastapi import FastAPI
+
 from .bot_api_client import BotAPIClient
 from .filters import (
     AnyFilterCallable,
@@ -36,6 +40,7 @@ from .types import (
     ChatMemberUpdated,
     ChosenInlineResult,
     InlineQuery,
+    InputFile,
     Message,
     Poll,
     PollAnswer,
@@ -44,6 +49,19 @@ from .types import (
     SomeUpdate,
     Update,
 )
+
+
+class WebHookSettings(pydantic.BaseModel):
+    # Web server settings
+    server_host: str = "0.0.0.0"
+    server_port: int = 8055
+    # Telegram hook settings
+    url: str
+    certificate: InputFile = None
+    ip_address: str = None
+    max_connections: int = 40
+    allowed_updates: list[str] = None
+    drop_pending_updates: bool = None
 
 
 class Bot(BotAPIClient):
@@ -65,30 +83,50 @@ class Bot(BotAPIClient):
     }
     __middlewares: list[MiddlewareCallable] = []
     __prepared_middlewares: list[MiddlewareCallable] = []
+    __webhook_app: FastAPI
 
     def __init__(
             self,
             bot_token: str,
             *,
             polling_timeout: int = 0,
-            polling_allowed_updates: list[str] = None
+            polling_allowed_updates: list[str] = None,
+            webhook_settings: WebHookSettings = None
     ):
         super(Bot, self).__init__(bot_token)
         self.logger = logging.getLogger(self.__class__.__qualname__)
         self.bot_token = bot_token
         self.polling_timeout = polling_timeout
         self.polling_allowed_updates = polling_allowed_updates
-
-    # Magic methods
-    async def __aenter__(self):
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.stop()
+        self.webhook_settings = webhook_settings
 
     def __prepare_middlewares_handlers(self):
         self.__prepared_middlewares = list(reversed(self.__middlewares))
+
+    async def __prepare_webhook(self):
+        if bool(self.webhook_settings):
+            await self.set_webhook(
+                url=f"{self.webhook_settings.url}/{self.bot_token.split(':')[1]}",
+                certificate=self.webhook_settings.certificate,
+                ip_address=self.webhook_settings.ip_address,
+                max_connections=self.webhook_settings.max_connections,
+                allowed_updates=self.webhook_settings.allowed_updates,
+                drop_pending_updates=self.webhook_settings.drop_pending_updates,
+            )
+            self.__webhook_app = FastAPI(
+                redoc_url=None,
+                docs_url=None
+            )
+            self.__webhook_app.add_api_route(
+                f"/{self.bot_token.split(':')[1]}",
+                endpoint=self.__on_webhook_received,
+                methods=["POST"]
+            )
+        else:
+            await self.delete_webhook()
+
+    async def __on_webhook_received(self, updates: list[Update]) -> Any:
+        await self.__handle_updates(updates)
 
     async def __call_handler(self, handler: Handler, update: SomeUpdate):
         try:
@@ -126,15 +164,24 @@ class Bot(BotAPIClient):
 
         return await call_next(self, update)
 
+    async def __handle_updates(self, updates: list[Update]):
+        for update in updates:
+            asyncio.create_task(self.__handle_update(update))
+
     async def run_webhook_server(self):
-        raise NotImplementedError
+        self.logger.info('Start webhook server')
+
+        uvicorn.run(
+            self.__webhook_app,
+            host=self.webhook_settings.server_host,
+            port=self.webhook_settings.server_port
+        )
 
     async def run_long_polling(self):
         self.logger.info('Start polling updates')
 
+        last_received_update_id = -1
         try:
-            last_received_update_id = -1
-
             while self.__running:
                 updates = await self.get_updates(
                     offset=last_received_update_id + 1,
@@ -142,17 +189,16 @@ class Bot(BotAPIClient):
                     allowed_updates=self.polling_allowed_updates
                 )
 
-                for update in updates:
-                    last_received_update_id = update.update_id
-                    asyncio.create_task(self.__handle_update(update))
-
+                last_received_update_id = updates[-1].update_id if len(updates) > 0 else last_received_update_id
                 await asyncio.sleep(0.01)
         finally:
             self.logger.info('Stop polling')
+            await self.stop()
 
     async def start(self):
         self.logger.info('Starting bot')
         self.__prepare_middlewares_handlers()
+        await self.__prepare_webhook()
         self.__running = True
 
     async def stop(self):
@@ -161,8 +207,10 @@ class Bot(BotAPIClient):
 
     async def run(self):
         async with self:
-            # TODO: Add option to run webhook server instead of long polling
-            await self.run_long_polling()
+            if bool(self.webhook_settings):
+                await self.run_webhook_server()
+            else:
+                await self.run_long_polling()
 
     def add_middleware(self, middleware: MiddlewareCallable):
         if self.__running:
@@ -313,6 +361,14 @@ class Bot(BotAPIClient):
 
     def on_chat_member(self, *, filters: ChatMemberFilterCallable):
         return self.on_update('chat_member', filters=filters)
+
+    # Magic methods
+    async def __aenter__(self):
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.stop()
 
 
 HandlerCallable = Callable[[Bot, SomeUpdate], Coroutine[Any, Any, None]]
